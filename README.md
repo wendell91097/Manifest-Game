@@ -34,11 +34,11 @@ This is a prototype. It proves the threshold system works. The full scope — fi
 
 Each band is a behavioral state, not a number. Crossing a threshold changes what that person does in the world — concretely, legibly, with downstream consequences. The overall relationship with each Star is a **Macropassion** label, derived from the average across all their Passions: from *Known Acquaintance* at neutral to *Bound Ally* or *Sworn Enemy* at the extremes.
 
-**Reputation** tracks Fame and Infamy independently for each Star. High Fame and high Infamy together produce a different named reputation than either alone — you can be well-known and dangerous at the same time. These combine into four named reputation states per Star (e.g. *Known Paradox*, *Honored Neighbor*, *Dangerous Debtor*, *Quiet Stranger* for Esperanza).
+**Reputation** tracks Fame and Infamy independently for each Star. These measure political relevance — how much you currently register in each Star's world — not a permanent ledger. They combine into four named reputation states per Star (e.g. *Known Paradox*, *Honored Neighbor*, *Dangerous Debtor*, *Quiet Stranger* for Esperanza). Both values decay each season without active maintenance and compound on the way up via a logarithmic curve — described further under Systems.
 
 **Seasons** advance on the player's call. The Decisions column shows what requires your hand this season. The Chronicle logs everything in period voice. The Persons column tracks where each Star stands across all their Passions.
 
-**Ruin** is possible through three paths: a single Star's Infamy reaching 65, two Stars' Infamy both reaching 45, or all Passions for a single Star falling below -50. The game ends early with a final Chronicle entry.
+**Ruin** is possible through three paths: a single Star's Infamy reaching 65, two Stars' Infamy both reaching 45, or all Passions for a single Star falling below -50. The game ends early with a final Chronicle entry. Fame buffers the first two paths — a Star who has publicly vouched for you has skin in the game and won't move to destroy you while that investment holds. Ruin is suppressed as long as your Fame with that Star is at least 80% of your Infamy.
 
 ---
 
@@ -46,6 +46,13 @@ Each band is a behavioral state, not a number. Crossing a threshold changes what
 
 ### Actions
 Each decision is tied to a source Star and an availability window. Effects move Passion values and Fame/Infamy scores across multiple Stars simultaneously. Serving one person usually costs another. Some actions expire if left unanswered.
+
+### Fame & Infamy
+Fame and Infamy don't accumulate permanently — they measure how much you currently matter to each Star's world. Both values are whole numbers between 0 and 100.
+
+**Decay.** Each season, both values fall at a rate inverse to their current level. Low values fade quickly; high values carry inertia and barely move. Going quiet with a Star is a viable survival strategy when Infamy is moderate, but once notoriety is entrenched it can no longer be waited out — decay slows almost to nothing, and you are forced to act rather than disappear.
+
+**Compounding.** Gains scale logarithmically with your current level, following the same equal-ratio property as the Richter scale: each equal interval of value multiplies incoming gains by the same factor. At low values the modifier is nearly imperceptible — 20 Fame adds roughly 6% to further Fame gains. At high values the acceleration becomes significant — 80 Infamy adds roughly 59% to further Infamy gains, and 100 adds 100%. Early accumulation is relatively cheap; the upper range becomes self-reinforcing fast. Losses are never amplified; only gains compound.
 
 ### Deferred Consequences
 Most actions plant a deferred outcome that fires years later in the Chronicle — a Sacramento court ruling, a railroad decision, a territorial record becoming permanent. The deferred entry arrives regardless of what you do afterward. What you decided in 1812 is still in the newspaper in 1819.
@@ -115,7 +122,7 @@ The framework maps onto Manifest like this:
 
 Deferred consequences — decisions planting Chronicle entries that fire years later — extend beyond the talk. Levine didn't address time-delayed outcomes; that's the original design contribution this prototype adds to the framework.
 
-Levine also left open the question of endpoints: when does the game end — when everything is destroyed, or everything is perfect? Manifest answers with the Ruin system: three distinct failure paths based on Infamy accumulation and Passion collapse, rather than a single win condition.
+Levine also left open the question of endpoints: when does the game end — when everything is destroyed, or everything is perfect? Manifest answers with the Ruin system: three distinct failure paths based on Infamy accumulation and Passion collapse, rather than a single win condition. The Fame buffer adds a further dimension: the same Infamy that ruins you with a stranger may not be enough to move a Star whose public reputation is tied to yours.
 
 The design question the prototype answers: does the threshold system produce meaningful tension? Can you build something where serving one person genuinely costs you with another — not as a stat penalty, but as a story?
 

@@ -40,6 +40,31 @@ const P = {
   posBar: '#3a7e32', negBar: '#8a2818',
 };
 
+// ─── FAME / INFAMY SYSTEM ─────────────────────────────────────────────────────
+// Fame and Infamy measure political/power relevance — not a permanent ledger,
+// but how much you currently register in each Star's world.
+//
+// Decay: both values degrade each season via  decay = DECAY_BASE * (1 - value/100).
+// High values decay slowly (entrenched notoriety has inertia); low values fade fast.
+// Any action that touches a Star's fame/infamy resets them back up the slow-decay zone.
+//
+// Fame-as-buffer: a Star who has publicly vouched for you has skin in the game.
+// Ruin checks use the relative gap rule: ruin triggers when infamy ≥ 65 AND fame < infamy × FAME_BUFFER_RATIO.
+
+const DECAY_BASE        = 4;    // max points lost per season (at value 0)
+const FAME_BUFFER_RATIO = 0.80; // fame must be ≥ infamy × this to suppress ruin
+
+function decayRate(value) {
+  // Returns how many points value will fall this season.
+  return DECAY_BASE * (1 - value / 100);
+}
+
+// Ruin is suppressed when fame ≥ infamy × FAME_BUFFER_RATIO.
+// A Star who has publicly backed you won't burn you while they still have skin in the game.
+function isRuinBuffered(star) {
+  return star.fame >= star.infamy * FAME_BUFFER_RATIO;
+}
+
 // ─── THRESHOLD SYSTEM ────────────────────────────────────────────────────────
 // Each passion runs -100 to +100, starting at 0.
 // Positive = player's actions align with what this person cares about.
@@ -472,7 +497,7 @@ const ACTIONS = [
       effects: [
         { star: 'esperanza', passion: 'land',      delta: +20, why: "The lawsuit has suspended railroad action on the disputed parcels." },
         { star: 'whitmore',  passion: 'route',     delta: -22, why: "The litigation has halted the northern corridor for at least a season." },
-        { star: 'solomon',   passion: 'autonomy',  delta: -12, why: "The inquiry Whitmore filed in 1855 is now a deposition request." },
+        { star: 'solomon',   passion: 'autonomy',  delta: -12, why: "The inquiry Whitmore filed in 1817 is now a deposition request." },
       ],
     },
   },
@@ -697,7 +722,7 @@ const REACTIVE_EVENTS = [
     id: 're_solomon_caleb_found',
     star: 'solomon', passion: 'caleb', threshold: 50, direction: 'above',
     headline: "CALEB REED RETURNS TO THE VALLEY — Freedman's brother arrives with Nevada contacts.",
-    body: "Caleb Reed has arrived at his brother's post carrying names — men in the Nevada silver territory who move money outside federal channels. Solomon introduced him quietly. The contacts are there for anyone Solomon trusts enough to share them with.",
+    body: "Solomon Reed has word that his brother Caleb is alive and located in the Nevada silver territory — and that he knows men who move money outside federal channels. The contacts exist. Solomon is not yet sharing them freely, but for the right person, the door is open.",
     effects: [],
     fameEffects:   { esperanza: 0, solomon: +8, whitmore: 0 },
     infamyEffects: { esperanza: 0, solomon: 0, whitmore: 0 },
@@ -728,7 +753,7 @@ const REACTIVE_EVENTS = [
     fameEffects:   { esperanza: 0, solomon: 0, whitmore: 0 },
     infamyEffects: { esperanza: 0, solomon: 0, whitmore: +8 },
     unlocksActions: [],
-    isNegative: false,
+    isNegative: true,
   },
 ];
 
@@ -1049,22 +1074,23 @@ function checkRuin(state) {
   const starList = Object.values(state.stars);
   let ruinHeadline = null, ruinReason = null;
 
-  // Single-star infamy ruin
+  // Single-star infamy ruin — suppressed if fame ≥ infamy × FAME_BUFFER_RATIO.
+  // A Star who has publicly backed you has skin in the game; burning you costs them too.
   const ruinPaths = {
     esperanza: { headline: 'THE VALLEY CLOSES ITS DOORS', reason: 'Esperanza Vallejo has named you before the full coalition. The Californio families have withdrawn credit, closed their roads, and filed a formal complaint with the territorial court. You are an enemy of the valley. There is no path forward from here.' },
     solomon:   { headline: 'WORD HAS GONE THROUGH THE NETWORK', reason: 'Solomon Reed has passed word through the freedmen network along every route from here to St. Louis. No one who passes through the valley will do business with you. Every door that mattered is closed. This territory is finished for you.' },
     whitmore:  { headline: 'PACIFIC RAILROAD MOVES AGAINST YOUR HOLDINGS', reason: "J.T. Whitmore has assigned the railroad's full legal team to your property claims. Every filing is contested within the week. The legal costs are unrelenting and you cannot sustain them. The homestead passes to other hands." },
   };
   for (const star of starList) {
-    if (star.infamy >= 65 && ruinPaths[star.id]) {
+    if (star.infamy >= 65 && !isRuinBuffered(star) && ruinPaths[star.id]) {
       ({ headline: ruinHeadline, reason: ruinReason } = ruinPaths[star.id]);
       break;
     }
   }
 
-  // Two-star combined infamy
+  // Two-star combined infamy — buffered individually by the same fame ratio
   if (!ruinHeadline) {
-    const high = starList.filter(s => s.infamy >= 45);
+    const high = starList.filter(s => s.infamy >= 45 && !isRuinBuffered(s));
     if (high.length >= 2) {
       const names = high.slice(0, 2).map(s => s.name.split(' ')[0]).join(' and ');
       ruinHeadline = 'TOO MANY ENEMIES — THE TERRITORY TURNS';
@@ -1111,11 +1137,28 @@ function applyE(stars, effects) {
       s[e.star].passions[e.passion].value = clamp(s[e.star].passions[e.passion].value + e.delta);
   return s;
 }
+// Logarithmic compounding modifier — equal value intervals give equal gain ratios,
+// like the Richter scale. 0 → +0%, 50 → +24%, 100 → +100%.
+// Formula: (10^(value/100) − 1) / 9
+function fiModifier(value) {
+  return (Math.pow(10, value / 100) - 1) / 9;
+}
+
 function applyFI(stars, fameEff, infamyEff) {
   const s = dc(stars);
   const lo = 0, hi = 100;
-  for (const [k, v] of Object.entries(fameEff))   if (s[k]) s[k].fame   = Math.max(lo, Math.min(hi, s[k].fame   + v));
-  for (const [k, v] of Object.entries(infamyEff)) if (s[k]) s[k].infamy = Math.max(lo, Math.min(hi, s[k].infamy + v));
+  // Compounding on positive deltas only — gaining fame/infamy accelerates logarithmically.
+  // Losing fame/infamy is not amplified; high values are already sticky via slow decay.
+  for (const [k, v] of Object.entries(fameEff)) {
+    if (!s[k]) continue;
+    const modifier = v > 0 ? 1 + fiModifier(s[k].fame) : 1;
+    s[k].fame = Math.round(Math.max(lo, Math.min(hi, s[k].fame + v * modifier)));
+  }
+  for (const [k, v] of Object.entries(infamyEff)) {
+    if (!s[k]) continue;
+    const modifier = v > 0 ? 1 + fiModifier(s[k].infamy) : 1;
+    s[k].infamy = Math.round(Math.max(lo, Math.min(hi, s[k].infamy + v * modifier)));
+  }
   return s;
 }
 
@@ -1260,6 +1303,21 @@ function reducer(state, action) {
       } else remaining.push(d);
     }
 
+    // Fame / Infamy decay — relevance fades without active maintenance.
+    // Higher values decay slower (inertia of notoriety); formula: decay = DECAY_BASE × (1 − value/100).
+    // Any action that generates fame/infamy this turn already pushed the value back up,
+    // so the "restart the clock" effect is naturally captured: interact → value rises →
+    // you re-enter the slow-decay zone. Go quiet → value falls faster as you approach 0.
+    for (const starId of Object.keys(stars)) {
+      const st = stars[starId];
+      if (st.fame > 0) {
+        st.fame = Math.max(0, Math.round(st.fame - decayRate(st.fame)));
+      }
+      if (st.infamy > 0) {
+        st.infamy = Math.max(0, Math.round(st.infamy - decayRate(st.infamy)));
+      }
+    }
+
     // World dispatches — arrive in the Spring of their target year
     const updatedFiredEvents = [...state.firedEvents];
     if (nextSeason === 'Spring') {
@@ -1287,7 +1345,7 @@ function reducer(state, action) {
     pendingGuest = GUESTS.find(g => g.ya <= nextYear && g.expires > nextYear && !guestHistory.includes(g.id)) || null;
 
     const allAvailable = [...ACTIONS, ...UNLOCKABLE_ACTIONS.filter(a => state.unlockedActions.includes(a.id))]
-      .filter(a => !state.taken.includes(a.id) && (a.ya ?? 0) <= state.year && (!a.expires || a.expires > state.year) && !a.requiresPassionVisible && (!a.requiresTaken || state.taken.includes(a.requiresTaken)))
+      .filter(a => !state.taken.includes(a.id) && (a.ya ?? 0) <= state.year && (!a.expires || a.expires > state.year) && (!a.requiresPassionVisible || isPassionVisible(stars, a.requiresPassionVisible.star, a.requiresPassionVisible.passion, state.revealedPassions)) && (!a.requiresTaken || state.taken.includes(a.requiresTaken)))
       .map(a => a.id);
     const seenActions = [...new Set([...state.seenActions, ...allAvailable])];
 
@@ -1454,15 +1512,45 @@ function StarCard({ star, revealedPassions }) {
       {/* Fame / Infamy */}
       <div style={{ borderTop: `1px solid ${T.bdr}`, paddingTop: 8, marginTop: 4 }}>
         <div style={{ display: 'flex', gap: 12 }}>
-          {[['Fame', star.fame, '#c9a14a'], ['Infamy', star.infamy, '#8a1818']].map(([lbl, val, col]) => (
-            <div key={lbl} style={{ flex: 1 }}>
-              <div style={{ fontSize: 8, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.07em' }}>{lbl}</div>
-              <div style={{ height: 3, background: T.bdr, marginTop: 2, borderRadius: 1 }}>
-                <div style={{ height: '100%', width: `${val}%`, background: col, borderRadius: 1, transition: 'width 0.5s' }} />
-              </div>
-              <div style={{ fontSize: 8, color: T.inkMut, fontFamily: "'Courier Prime', monospace" }}>{val}</div>
+          {/* Fame */}
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 8, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.07em' }}>Fame</div>
+            <div style={{ height: 3, background: T.bdr, marginTop: 2, borderRadius: 1 }}>
+              <div style={{ height: '100%', width: `${star.fame}%`, background: '#c9a14a', borderRadius: 1, transition: 'width 0.5s' }} />
             </div>
-          ))}
+            <div style={{ fontSize: 8, color: T.inkMut, fontFamily: "'Courier Prime', monospace" }}>{Math.floor(star.fame)}</div>
+          </div>
+          {/* Infamy — show effective infamy (buffered by fame) */}
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 8, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.07em' }}>Infamy</div>
+            <div style={{ height: 3, background: T.bdr, marginTop: 2, borderRadius: 1, position: 'relative' }}>
+              <div style={{ height: '100%', width: `${star.infamy}%`, background: '#8a1818', borderRadius: 1, transition: 'width 0.5s' }} />
+              {/* Fame buffer overlay — shows the fame coverage against infamy */}
+              {star.fame > 0 && star.infamy > 0 && (
+                <div
+                  title={`Fame covers ${Math.round((star.fame / star.infamy) * 100)}% of infamy (need ≥80% to buffer ruin)`}
+                  style={{
+                    position: 'absolute', top: 0, bottom: 0,
+                    right: `${100 - star.infamy}%`,
+                    width: `${Math.min(star.fame * FAME_BUFFER_RATIO, star.infamy)}%`,
+                    background: '#c9a14a55', borderRadius: '0 1px 1px 0',
+                    transition: 'all 0.5s', cursor: 'default',
+                  }}
+                />
+              )}
+            </div>
+            <div style={{ fontSize: 8, color: T.inkMut, fontFamily: "'Courier Prime', monospace" }}>
+              {Math.floor(star.infamy)}
+              {star.fame > 0 && star.infamy > 0 && (
+                <span
+                  title={`Ruin triggers at infamy ≥65 unless fame ≥ infamy×0.8. Currently: fame ${Math.floor(star.fame)} / need ${Math.ceil(star.infamy * 0.8)}.`}
+                  style={{ color: star.fame >= star.infamy * FAME_BUFFER_RATIO ? '#c9a14a99' : '#8a181866', marginLeft: 3, cursor: 'default' }}
+                >
+                  {star.fame >= star.infamy * FAME_BUFFER_RATIO ? '(buffered)' : `(need ${Math.ceil(star.infamy * 0.8)} fame)`}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
