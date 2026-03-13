@@ -177,7 +177,7 @@ const INITIAL_STARS = {
       caleb: {
         label: 'Brotherhood',
         desc: 'The search for his brother Caleb, missing since the Nevada silver rush.',
-        hiddenUntil: 15,
+        hiddenUntil: 25,
         value: 0,
         behaviors: {
           75:  'He says you gave him back something he had stopped believing he would find.',
