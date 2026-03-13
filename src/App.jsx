@@ -103,7 +103,7 @@ const INITIAL_STARS = {
       },
       trust: {
         label: 'Anglo Distrust',
-        desc: 'A stronger Anglo presence gives her people less sway in the valley.',
+        desc: 'A stronger Anglo presence gives her people less leverage in the valley. Every action you take either confirms that pattern or pushes against it.',
         value: 0,
         behaviors: {
           75:  'She tells you things she tells no one else. You are inside the circle.',
@@ -557,13 +557,27 @@ const ACTIONS = [
 ];
 
 // ─── QUIET SEASONS ────────────────────────────────────────────────────────────
-const QUIET_SEASONS = [
-  { h: "SPRING PASSES WITHOUT INCIDENT", b: "The valley road is muddy with snowmelt. No surveys are filed. No court dates are pending. You spend three weeks repairing fences and attending to correspondence that requires nothing of consequence." },
-  { h: "A QUIET SUMMER IN THE VALLEY",    b: "The heat comes early and stays. Whitmore's crew is not seen on the roads this month. Solomon's post is busy with travelers. You have time to think, which is its own kind of discomfort." },
-  { h: "AUTUMN: NO WORD FROM SACRAMENTO", b: "The leaves turn. The stage brings no letters requiring action. You attend a dinner at the Merchant's Association and say nothing of consequence to anyone." },
-  { h: "WINTER CLOSES THE PASSES",        b: "Snow on the northern route. Survey work is halted. Nothing needs to be done. You wait and watch the deferred things accumulate." },
-  { h: "THE SEASON OFFERS NOTHING TO DECIDE", b: "There are days when history moves without you. This appears to be one of them. The valley persists. The people in it persist. You note the quiet and are not certain whether to be grateful or suspicious." },
-  { h: "QUIET WEEKS ON THE LAND",         b: "No summons. No surveyors. No letters requiring a signature. The work of the land goes on. You begin to suspect the calm." },
+const QUIET_SEASONS_BY_SEASON = {
+  Spring: [
+    { h: "SPRING PASSES WITHOUT INCIDENT",       b: "The valley road is muddy with snowmelt. No surveys are filed. No court dates are pending. You spend three weeks repairing fences and attending to correspondence that requires nothing of consequence." },
+    { h: "A QUIET SPRING ON THE LAND",            b: "The rains come and go without consequence. No riders arrive with letters. No surveyors on the road. You note the absence of urgency and are not sure what to make of it." },
+  ],
+  Summer: [
+    { h: "A QUIET SUMMER IN THE VALLEY",          b: "The heat comes early and stays. Whitmore's crew is not seen on the roads this month. Solomon's post is busy with travelers. You have time to think, which is its own kind of discomfort." },
+    { h: "MIDSUMMER — NO WORD FROM THE TERRITORY", b: "Nothing arrives by stage or rider that requires action. The valley bakes. You watch the road and wait for something that does not come." },
+  ],
+  Autumn: [
+    { h: "AUTUMN: NO WORD FROM SACRAMENTO",       b: "The leaves turn. The stage brings no letters requiring action. You attend a dinner at the Merchant's Association and say nothing of consequence to anyone." },
+    { h: "A STILL AUTUMN IN THE VALLEY",          b: "The harvest moves without incident. No filings, no summons, no visitors at the door. The quiet accumulates like sediment." },
+  ],
+  Winter: [
+    { h: "WINTER CLOSES THE PASSES",              b: "Snow on the northern route. Survey work is halted. Nothing needs to be done. You wait and watch the deferred things accumulate." },
+    { h: "WINTER — THE ROAD GOES QUIET",          b: "Nothing moves through the valley that wasn't already moving. You tend to small obligations and wait for the ground to thaw." },
+  ],
+};
+const QUIET_SEASONS_GENERIC = [
+  { h: "THE SEASON OFFERS NOTHING TO DECIDE",   b: "There are days when history moves without you. This appears to be one of them. The valley persists. The people in it persist. You note the quiet and are not certain whether to be grateful or suspicious." },
+  { h: "QUIET WEEKS ON THE LAND",               b: "No summons. No surveyors. No letters requiring a signature. The work of the land goes on. You begin to suspect the calm." },
 ];
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -1197,8 +1211,12 @@ function reducer(state, action) {
     // Quiet season
     const hadAction = state.log.length > 0 && state.log[0].year === state.year && state.log[0].season === state.season && !state.log[0].isQuiet;
     let quietEntry = null;
-    if (!hadAction && newEntries.length === 0) {
-      const qs = QUIET_SEASONS[state.quietCount % QUIET_SEASONS.length];
+    if (!hadAction) {
+      const seasonPool = QUIET_SEASONS_BY_SEASON[state.season] || [];
+      const usedSeasonCount = state.log.filter(e => e.isQuiet && e.season === state.season).length;
+      const qs = usedSeasonCount < seasonPool.length
+        ? seasonPool[usedSeasonCount]
+        : QUIET_SEASONS_GENERIC[state.quietCount % QUIET_SEASONS_GENERIC.length];
       quietEntry = { id: `quiet-${state.year}-${state.season}`, year: state.year, season: state.season, headline: qs.h, body: qs.b, decision: null, effects: [], isDeferred: false, isQuiet: true, isReactive: false };
     }
 
@@ -1398,7 +1416,7 @@ function StarCard({ star }) {
 }
 
 // ─── ACTION CARD ──────────────────────────────────────────────────────────────
-function ActionCard({ act, stars, dispatch, revealed, isNew, year, season }) {
+function ActionCard({ act, stars, dispatch, revealed, isNew, year, season, animating }) {
   const T = useContext(ThemeCtx);
   const [hov, setHov] = useState(false);
   const [expTip, setExpTip] = useState(false);
@@ -1454,12 +1472,12 @@ function ActionCard({ act, stars, dispatch, revealed, isNew, year, season }) {
         </div>
 
         <div
-          style={{ fontSize: 13, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 700, lineHeight: 1.3, marginBottom: collapsed ? 0 : 6, cursor: 'pointer' }}
-          onClick={() => dispatch({ type: 'ACT', id: act.id })}
+          style={{ fontSize: 13, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 700, lineHeight: 1.3, marginBottom: collapsed ? 0 : 6, cursor: animating ? 'default' : 'pointer', opacity: animating ? 0.5 : 1 }}
+          onClick={() => { if (!animating) dispatch({ type: 'ACT', id: act.id }); }}
         >{act.dispatch}</div>
 
         {!collapsed && (
-          <div onClick={() => dispatch({ type: 'ACT', id: act.id })} style={{ cursor: 'pointer' }}>
+          <div onClick={() => { if (!animating) dispatch({ type: 'ACT', id: act.id }); }} style={{ cursor: animating ? 'default' : 'pointer' }}>
             <div style={{ fontSize: 10, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.55, marginBottom: 10 }}>{act.desc}</div>
             <div style={{ borderTop: `1px solid ${T.bdr}`, paddingTop: 8 }}>
               <div style={{ fontSize: 8, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6, fontFamily: "'Courier Prime', monospace" }}>Known Effects & Consequences</div>
@@ -1703,34 +1721,6 @@ function HomesteadPanel({ homesteadLog }) {
   );
 }
 
-// ─── INTRO SCREEN ─────────────────────────────────────────────────────────────
-function IntroScreen({ onBegin, T }) {
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 400, background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, fontFamily: "'Courier Prime', monospace" }}>
-      <div style={{ maxWidth: 520, width: '100%', textAlign: 'center' }}>
-        <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.3em', marginBottom: 20 }}>The Territorial Standard · Est. 1810</div>
-        <div style={{ fontSize: 11, color: T.inkFaint, fontFamily: "'Playfair Display', serif", fontStyle: 'italic', marginBottom: 16 }}>✦ ✦ ✦</div>
-        <div style={{ fontSize: 38, color: '#c9a14a', fontFamily: "'Playfair Display', serif", fontWeight: 900, letterSpacing: '0.06em', lineHeight: 1, marginBottom: 10 }}>MANIFEST</div>
-        <div style={{ fontSize: 9, color: T.inkMut, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.25em', marginBottom: 32 }}>California Territory · 1810</div>
-        <div style={{ fontSize: 11, color: T.inkMut, fontFamily: "'Playfair Display', serif", fontStyle: 'italic', lineHeight: 1.85, marginBottom: 12, borderTop: `1px solid ${T.bdr}`, borderBottom: `1px solid ${T.bdr}`, padding: '22px 0' }}>
-          You have arrived in the valley with land, some money, and a name not yet known.<br /><br />
-          Three lives run alongside yours — a Californio heir, a freedman trader, a railroad surveyor. What you do for them, and to them, will determine whether you endure.
-        </div>
-        <div style={{ fontSize: 8, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.6, marginBottom: 32 }}>
-          Decisions accumulate. Some arrive as choices. Others arrive as consequences.
-        </div>
-        <button
-          onClick={onBegin}
-          style={{ background: 'transparent', border: `1px solid #c9a14a`, color: '#c9a14a', padding: '10px 32px', fontFamily: "'Courier Prime', monospace", fontSize: 10, cursor: 'pointer', letterSpacing: '0.18em', textTransform: 'uppercase', borderRadius: 2 }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#c9a14a'; e.currentTarget.style.color = T.bg; }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#c9a14a'; }}>
-          Begin — 1810 →
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── RUIN SCREEN ──────────────────────────────────────────────────────────────
 function RuinScreen({ state, dispatch }) {
   const T = useContext(ThemeCtx);
@@ -1805,7 +1795,6 @@ function HeaderMenu({ dispatch, darkMode, setDarkMode }) {
 export default function ManifestGame() {
   const [state, dispatch] = useReducer(reducer, INIT);
   const [darkMode, setDarkMode] = useState(true);
-  const [showIntro, setShowIntro] = useState(true);
   const T = mkT(darkMode);
   const [animating, setAnimating] = useState(false);
   const [animPhase, setAnimPhase]     = useState('idle');
@@ -1899,8 +1888,6 @@ export default function ManifestGame() {
         .action-card-new { animation: fadeInAction 0.4s ease-out forwards; }
       `}</style>
 
-      {showIntro && <IntroScreen onBegin={() => setShowIntro(false)} T={T} />}
-
       {state.ruined && <RuinScreen state={state} dispatch={dispatch} />}
       {state.pendingGuest && !state.ruined && (
         <GuestModal guest={state.pendingGuest} dispatch={dispatch} />
@@ -1993,7 +1980,7 @@ export default function ManifestGame() {
                   <div style={{ height: 1, background: T.bdr, marginTop: 10 }} />
                 </div>
               ) : playable.map(act => (
-                <ActionCard key={act.id} act={act} stars={state.stars} dispatch={dispatch} revealed={revealed} isNew={newThisTurn.has(act.id)} year={state.year} season={state.season} />
+                <ActionCard key={act.id} act={act} stars={state.stars} dispatch={dispatch} revealed={revealed} isNew={newThisTurn.has(act.id)} year={state.year} season={state.season} animating={animating} />
               ))}
             </div>
           </div>
