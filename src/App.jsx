@@ -103,7 +103,7 @@ const INITIAL_STARS = {
       },
       trust: {
         label: 'Anglo Distrust',
-        desc: 'A stronger Anglo presence gives her people less leverage in the valley. Every action you take either confirms that pattern or pushes against it.',
+        desc: 'A stronger Anglo presence gives her people less swag in the valley.',
         value: 0,
         behaviors: {
           75:  'She tells you things she tells no one else. You are inside the circle.',
