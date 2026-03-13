@@ -8,7 +8,7 @@ Narrative strategy game set in the 1800s American West. Built in React. Part of 
 
 ## What This Is
 
-A newspaper-desk strategy game. You are a landowner at the crossroads of everything America is becoming. Three people — Esperanza Vallejo, Solomon Reed, and Reverend Whitmore — have noticed what you do with your leverage. Every season you make decisions. Every decision moves something.
+A newspaper-desk strategy game. You are a landowner at the crossroads of everything America is becoming. Three people — Esperanza Vallejo, Solomon Reed, and J.T. Whitmore — have noticed what you do with your leverage. Every season you make decisions. Every decision moves something.
 
 This is a prototype. It proves the threshold system works. The full scope — fifty years, a guest roster, the compounding newspaper mechanic — is still ahead.
 
@@ -50,7 +50,7 @@ She represents 47 people whose livelihoods depend on the Vallejo grant. At Devot
 Passions: Permanence, Independence, Network Reach.
 He built something in this valley with no safety net. At Devoted he lists you as a trusted partner in territorial filings. At Irreconcilable he relocates his most valuable operations beyond your reach.
 
-**Reverend Whitmore — Territorial Institutions**
+**J.T. Whitmore — Territorial Institutions**
 Passions: Moral Authority, Federal Alignment, Settlement Order.
 The institutional face of the expanding American project. Useful. Expensive to cross. At Devoted he endorses your interests from the pulpit. At Irreconcilable he testifies against you in federal proceedings.
 
