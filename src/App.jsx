@@ -177,7 +177,7 @@ const INITIAL_STARS = {
       caleb: {
         label: 'Brotherhood',
         desc: 'The search for his brother Caleb, missing since the Nevada silver rush.',
-        hiddenUntil: 30,
+        hiddenUntil: 15,
         value: 0,
         behaviors: {
           75:  'He says you gave him back something he had stopped believing he would find.',
@@ -593,7 +593,16 @@ function isPassionVisible(stars, starId, passionKey) {
   const passion = stars[starId]?.passions[passionKey];
   if (!passion) return false;
   if (!passion.hiddenUntil) return true;
-  return macropassionValue(stars[starId].passions) >= passion.hiddenUntil;
+  // Average only the non-hidden passions for the reveal check.
+  // The hidden passion's value still accumulates normally — it just
+  // doesn't count against the threshold that determines its own reveal.
+  const visibleVals = Object.entries(stars[starId].passions)
+    .filter(([k, p]) => k !== passionKey && !p.hiddenUntil)
+    .map(([, p]) => p.value);
+  const avg = visibleVals.length > 0
+    ? visibleVals.reduce((a, b) => a + b, 0) / visibleVals.length
+    : macropassionValue(stars[starId].passions);
+  return avg >= passion.hiddenUntil;
 }
 
 function macropassion(passions) {
