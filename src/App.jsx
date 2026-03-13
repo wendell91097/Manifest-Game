@@ -177,7 +177,11 @@ const INITIAL_STARS = {
       caleb: {
         label: 'Brotherhood',
         desc: 'The search for his brother Caleb, missing since the Nevada silver rush.',
-        hiddenUntil: 25,
+        // hiddenUntil: 15 matches the "Cautious Friend" macro-passion threshold —
+        // the full 3-passion average (roots + autonomy + caleb) after grant_sanctuary
+        // and lend_solomon. Using the same average as the display label means no jump
+        // on reveal. state.revealedPassions locks it permanently once crossed.
+        hiddenUntil: 15,
         value: 0,
         behaviors: {
           75:  'He says you gave him back something he had stopped believing he would find.',
@@ -499,6 +503,10 @@ const ACTIONS = [
   },
   {
     id: 'introduce_caleb', ya: 1819, source: 'solomon', msgType: 'Request',
+    // Quest chain: find_brother must be completed before this action surfaces.
+    // Without this, introduce_caleb would appear in 1819 regardless of whether
+    // the search was ever conducted — bypassing the entire chain.
+    requiresTaken: 'find_brother',
     dispatch: "Introduce Caleb Reed to the Valley Community",
     desc: "Caleb has arrived from Nevada and knows no one here. Solomon wants him established. You can open doors — make introductions, speak for him at the Merchant's Association meeting, use your standing as a local landowner to give him a foundation he could not build alone. Your standing is the currency you are spending.",
     result: "CALEB REED JOINS BROTHER'S TRADING CONCERN — Former Comstock miner settles in valley, joins family business.",
@@ -589,20 +597,37 @@ function macropassionValue(passions) {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
-function isPassionVisible(stars, starId, passionKey) {
+// Once a hidden passion's threshold is crossed it is permanently revealed —
+// stored in state.revealedPassions as "starId:passionKey" strings.
+// isPassionVisible checks the permanent set first so that a macro-passion
+// dip cannot hide knowledge the player has already earned or sever a quest
+// chain mid-progress.
+function isPassionVisible(stars, starId, passionKey, revealedPassions = []) {
   const passion = stars[starId]?.passions[passionKey];
   if (!passion) return false;
   if (!passion.hiddenUntil) return true;
-  // Average only the non-hidden passions for the reveal check.
-  // The hidden passion's value still accumulates normally — it just
-  // doesn't count against the threshold that determines its own reveal.
-  const visibleVals = Object.entries(stars[starId].passions)
-    .filter(([k, p]) => k !== passionKey && !p.hiddenUntil)
-    .map(([, p]) => p.value);
-  const avg = visibleVals.length > 0
-    ? visibleVals.reduce((a, b) => a + b, 0) / visibleVals.length
-    : macropassionValue(stars[starId].passions);
-  return avg >= passion.hiddenUntil;
+  if (revealedPassions.includes(`${starId}:${passionKey}`)) return true;
+  // Not yet permanently revealed — check the live threshold using the same
+  // full average as macropassionValue so the number matches the label the
+  // player already sees.
+  return macropassionValue(stars[starId].passions) >= passion.hiddenUntil;
+}
+
+// Scans all stars for hidden passions that have newly crossed their threshold
+// and returns an updated revealed set. Only ever appends — never removes.
+function checkPassionReveals(stars, revealedPassions) {
+  const updated = [...revealedPassions];
+  for (const [starId, star] of Object.entries(stars)) {
+    for (const [passionKey, passion] of Object.entries(star.passions)) {
+      if (!passion.hiddenUntil) continue;
+      const key = `${starId}:${passionKey}`;
+      if (updated.includes(key)) continue;
+      if (macropassionValue(star.passions) >= passion.hiddenUntil) {
+        updated.push(key);
+      }
+    }
+  }
+  return updated;
 }
 
 function macropassion(passions) {
@@ -1141,6 +1166,7 @@ const INIT = {
   year: 1810, season: 'Spring', quietCount: 0,
   stars: INITIAL_STARS, taken: [], log: [], deferred: [],
   firedEvents: [], pendingChoices: [], unlockedActions: [], seenActions: [],
+  revealedPassions: [],
   pendingGuest: null, guestHistory: [], homesteadLog: [],
   ruined: false, ruinHeadline: null, ruinReason: null,
 };
@@ -1161,7 +1187,8 @@ function reducer(state, action) {
     };
     const deferred = [...state.deferred];
     if (act.def) deferred.push({ fireYear: state.year + act.def.years, headline: act.def.headline, body: act.def.body, effects: act.def.effects, originLabel: act.dispatch, originYear: state.year });
-    const next = { ...state, stars, taken: [...state.taken, act.id], deferred };
+    const revealedPassions = checkPassionReveals(stars, state.revealedPassions);
+    const next = { ...state, stars, taken: [...state.taken, act.id], deferred, revealedPassions };
     return checkRuin(checkEvents({ ...next, log: [entry, ...state.log] }, prevStars, []));
   }
   if (action.type === 'CHOOSE') {
@@ -1179,7 +1206,8 @@ function reducer(state, action) {
       effects: choice.effects, isDeferred: false, isQuiet: false, isReactive: true, isNegative: false,
     };
     const pending = state.pendingChoices.filter(p => p.id !== action.eventId);
-    const next = { ...state, stars, pendingChoices: pending };
+    const revealedPassions = checkPassionReveals(stars, state.revealedPassions);
+    const next = { ...state, stars, pendingChoices: pending, revealedPassions };
     return checkRuin(checkEvents({ ...next, log: [entry, ...state.log] }, prevStars, []));
   }
   if (action.type === 'ADVANCE') {
@@ -1259,11 +1287,12 @@ function reducer(state, action) {
     pendingGuest = GUESTS.find(g => g.ya <= nextYear && g.expires > nextYear && !guestHistory.includes(g.id)) || null;
 
     const allAvailable = [...ACTIONS, ...UNLOCKABLE_ACTIONS.filter(a => state.unlockedActions.includes(a.id))]
-      .filter(a => !state.taken.includes(a.id) && (a.ya ?? 0) <= state.year && (!a.expires || a.expires > state.year) && !a.requiresPassionVisible)
+      .filter(a => !state.taken.includes(a.id) && (a.ya ?? 0) <= state.year && (!a.expires || a.expires > state.year) && !a.requiresPassionVisible && (!a.requiresTaken || state.taken.includes(a.requiresTaken)))
       .map(a => a.id);
     const seenActions = [...new Set([...state.seenActions, ...allAvailable])];
 
-    const next = { ...state, year: nextYear, season: nextSeason, stars, deferred: remaining, quietCount: state.quietCount + (quietEntry ? 1 : 0), seenActions, pendingGuest, guestHistory, homesteadLog, firedEvents: updatedFiredEvents };
+    const revealedPassions = checkPassionReveals(stars, state.revealedPassions);
+    const next = { ...state, year: nextYear, season: nextSeason, stars, deferred: remaining, quietCount: state.quietCount + (quietEntry ? 1 : 0), seenActions, pendingGuest, guestHistory, homesteadLog, firedEvents: updatedFiredEvents, revealedPassions };
     return checkRuin(checkEvents({ ...next, log: [...newEntries, ...(quietEntry ? [quietEntry] : []), ...state.log] }, prevStars, []));
   }
   if (action.type === 'GUEST_CHOOSE') {
@@ -1285,7 +1314,8 @@ function reducer(state, action) {
     if (choice.echoDef) {
       deferred.push({ fireYear: state.year + choice.echoDef.years, headline: choice.echoDef.headline, body: choice.echoDef.body, effects: [], originLabel: `${guest.name}: ${choice.label}`, originYear: state.year, isDispatch: true, dateline: choice.echoDef.dateline });
     }
-    const next = { ...state, stars, pendingGuest: null, guestHistory: [...state.guestHistory, action.guestId], homesteadLog, deferred };
+    const revealedPassions = checkPassionReveals(stars, state.revealedPassions);
+    const next = { ...state, stars, pendingGuest: null, guestHistory: [...state.guestHistory, action.guestId], homesteadLog, deferred, revealedPassions };
     return checkRuin(checkEvents({ ...next, log: [entry, ...state.log] }, prevStars, []));
   }
   if (action.type === 'RESET') return INIT;
@@ -1392,7 +1422,7 @@ function HoverLabel({ label, value, valueColor, valueSize = 11, tooltip, align =
 }
 
 // ─── STAR CARD ────────────────────────────────────────────────────────────────
-function StarCard({ star }) {
+function StarCard({ star, revealedPassions }) {
   const T = useContext(ThemeCtx);
   const [expanded, setExpanded] = useState(false);
   const mp  = macropassion(star.passions);
@@ -1416,7 +1446,7 @@ function StarCard({ star }) {
 
       {/* Passions — hidden ones revealed only once macropassion threshold is met */}
       {Object.entries(star.passions)
-        .filter(([, p]) => !p.hiddenUntil || macropassionValue(star.passions) >= p.hiddenUntil)
+        .filter(([k, p]) => isPassionVisible({ [star.id]: star }, star.id, k, revealedPassions))
         .map(([k, p]) => (
           <PassionBar key={k} passionKey={k} p={p} color={star.color} />
         ))}
@@ -1451,7 +1481,7 @@ function StarCard({ star }) {
 }
 
 // ─── ACTION CARD ──────────────────────────────────────────────────────────────
-function ActionCard({ act, stars, dispatch, revealed, isNew, year, season, animating }) {
+function ActionCard({ act, stars, dispatch, revealed, revealedPassions, isNew, year, season, animating }) {
   const T = useContext(ThemeCtx);
   const [hov, setHov] = useState(false);
   const [expTip, setExpTip] = useState(false);
@@ -1517,7 +1547,7 @@ function ActionCard({ act, stars, dispatch, revealed, isNew, year, season, anima
             <div style={{ fontSize: 10, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.55, marginBottom: 10 }}>{descText}</div>
             <div style={{ borderTop: `1px solid ${T.bdr}`, paddingTop: 8 }}>
               <div style={{ fontSize: 8, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6, fontFamily: "'Courier Prime', monospace" }}>Known Effects & Consequences</div>
-              {act.effects.filter(e => revealed.includes(e.star) && isPassionVisible(stars, e.star, e.passion)).map((e, i, arr) => {
+              {act.effects.filter(e => revealed.includes(e.star) && isPassionVisible(stars, e.star, e.passion, revealedPassions)).map((e, i, arr) => {
                 const star    = stars[e.star];
                 const passion = star?.passions[e.passion];
                 const ben     = e.delta > 0;
@@ -1556,7 +1586,7 @@ function ActionCard({ act, stars, dispatch, revealed, isNew, year, season, anima
 }
 
 // ─── LOG ENTRY ────────────────────────────────────────────────────────────────
-function LogEntry({ entry, stars, revealed, isNew }) {
+function LogEntry({ entry, stars, revealed, revealedPassions, isNew }) {
   const T = useContext(ThemeCtx);
   if (entry.isQuiet) return (
     <div style={{ borderBottom: `1px solid ${T.bdr}`, paddingBottom: 12, marginBottom: 12, opacity: 0.45 }}>
@@ -1620,7 +1650,7 @@ function LogEntry({ entry, stars, revealed, isNew }) {
 
   const hasUnknownStar = entry.effects.some(e => e.star && !revealed.includes(e.star));
   const bodyText = (hasUnknownStar && entry.bodyHidden) ? entry.bodyHidden : entry.body;
-  const visibleEffects = entry.effects.filter(e => (!e.star || revealed.includes(e.star)) && isPassionVisible(stars, e.star, e.passion));
+  const visibleEffects = entry.effects.filter(e => (!e.star || revealed.includes(e.star)) && isPassionVisible(stars, e.star, e.passion, revealedPassions));
 
   const D = entry.isDeferred;
   const R = entry.isReactive && !D;
@@ -1890,11 +1920,15 @@ export default function ManifestGame() {
       if (state.taken.includes(a.id)) return false;
       if ((a.ya ?? 0) > state.year) return false;
       if (a.expires && a.expires <= state.year) return false;
+      // Quest chain: a prior action must have been completed before this one surfaces.
+      if (a.requiresTaken && !state.taken.includes(a.requiresTaken)) return false;
+      // Passion visibility: use isPassionVisible() which correctly averages only the
+      // non-hidden passions for the reveal check — NOT macropassionValue(), which
+      // would drag the hidden passion's starting value of 0 into the average and
+      // silently inflate the effective threshold required to unlock this action.
       if (a.requiresPassionVisible) {
         const { star, passion } = a.requiresPassionVisible;
-        const p = state.stars[star]?.passions[passion];
-        if (!p) return false;
-        if (p.hiddenUntil && macropassionValue(state.stars[star].passions) < p.hiddenUntil) return false;
+        if (!isPassionVisible(state.stars, star, passion, state.revealedPassions)) return false;
       }
       return true;
     });
@@ -2039,7 +2073,7 @@ export default function ManifestGame() {
           {/* PERSONS */}
           <div style={{ width: 248, borderRight: `1px solid ${T.bdr}`, padding: '14px 10px', overflowY: 'auto', flexShrink: 0, background: T.surf }}>
             <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 10, paddingBottom: 6, borderBottom: `1px solid ${T.bdr}` }}>Persons of Interest</div>
-            {Object.values(state.stars).filter(s => revealed.includes(s.id)).map(s => <StarCard key={s.id} star={s} />)}
+            {Object.values(state.stars).filter(s => revealed.includes(s.id)).map(s => <StarCard key={s.id} star={s} revealedPassions={state.revealedPassions} />)}
             <HomesteadPanel homesteadLog={state.homesteadLog} />
           </div>
 
@@ -2065,7 +2099,7 @@ export default function ManifestGame() {
                   <div style={{ height: 1, background: T.bdr, marginTop: 10 }} />
                 </div>
               ) : playable.map(act => (
-                <ActionCard key={act.id} act={act} stars={state.stars} dispatch={dispatch} revealed={revealed} isNew={newThisTurn.has(act.id)} year={state.year} season={state.season} animating={animating} />
+                <ActionCard key={act.id} act={act} stars={state.stars} dispatch={dispatch} revealed={revealed} revealedPassions={state.revealedPassions} isNew={newThisTurn.has(act.id)} year={state.year} season={state.season} animating={animating} />
               ))}
             </div>
           </div>
@@ -2077,7 +2111,7 @@ export default function ManifestGame() {
               <div style={{ fontSize: 13, color: T.inkMut, fontFamily: "'Playfair Display', serif", fontStyle: 'italic', lineHeight: 1.9 }}>
                 The ledger is empty.<br/><br/>You have land, some money, and a series of obligations not yet named.
               </div>
-            ) : state.log.map(entry => <LogEntry key={entry.id} entry={entry} stars={state.stars} revealed={revealed} isNew={entry.year === state.year && entry.season === state.season} />)}
+            ) : state.log.map(entry => <LogEntry key={entry.id} entry={entry} stars={state.stars} revealed={revealed} revealedPassions={state.revealedPassions} isNew={entry.year === state.year && entry.season === state.season} />)}
           </div>
 
         </div>
