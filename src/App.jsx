@@ -1,6 +1,32 @@
-import { useState, useReducer, useRef, useEffect } from "react";
+import { useState, useReducer, useRef, useEffect, createContext, useContext } from "react";
 
 const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap');`;
+
+// ─── THEME ───────────────────────────────────────────────────────────────────
+const ThemeCtx = createContext({});
+
+function mkT(dm) {
+  return dm ? {
+    bg:'#0e0c07',surf:'#141008',card:'#1a1508',hdr:'#1a1408',
+    cardHov:'#1e1a09',cardSub:'#211c0a',
+    bdr:'#2a2110',bdrHi:'#453618',bdrSub:'#22190a',
+    ink:'#e4d4a8',inkMid:'#c0a878',inkMut:'#aa9068',inkDim:'#8a7040',
+    inkFaint:'#6a5828',inkWhy:'#9a8058',dispInk:'#d4c090',dispFaint:'#8a7848',
+    modalBg:'rgba(8,7,4,0.92)',defBg:'#110606',reactBg:'#0e0a18',
+    newBg:'#161208',inactBg:'#110a08',ruinBg:'#0a0806',ruinCardBg:'#141008',
+    scrollTrack:'#0e0c07',scrollThumb:'#2a2110',scrollHover:'#453618',
+  } : {
+    // Aged newsprint parchment — dark brown ink only, NO hue inversion
+    bg:'#f2ead6',surf:'#e9e0c8',card:'#e4dac4',hdr:'#ddd4bc',
+    cardHov:'#d8cfb8',cardSub:'#d2c9b0',
+    bdr:'#b8a880',bdrHi:'#8a7850',bdrSub:'#c4b48a',
+    ink:'#18110a',inkMid:'#26190e',inkMut:'#40301a',inkDim:'#5c4828',
+    inkFaint:'#7a6040',inkWhy:'#4a3820',dispInk:'#18110a',dispFaint:'#5c4828',
+    modalBg:'rgba(210,196,168,0.96)',defBg:'#f0e8e0',reactBg:'#ede8f2',
+    newBg:'#eae4d0',inactBg:'#ede6d4',ruinBg:'#f2ead6',ruinCardBg:'#e9e0c8',
+    scrollTrack:'#f2ead6',scrollThumb:'#b8a880',scrollHover:'#8a7850',
+  };
+}
 
 // ─── PALETTE ─────────────────────────────────────────────────────────────────
 const P = {
@@ -76,8 +102,8 @@ const INITIAL_STARS = {
         },
       },
       trust: {
-        label: 'Personal Trust',
-        desc: 'Her belief that you — specifically, as an Anglo settler — can be trusted with what she values.',
+        label: 'Anglo Distrust',
+        desc: 'A stronger Anglo presence gives her people less sway in the valley.',
         value: 0,
         behaviors: {
           75:  'She tells you things she tells no one else. You are inside the circle.',
@@ -151,6 +177,7 @@ const INITIAL_STARS = {
       caleb: {
         label: 'Brotherhood',
         desc: 'The search for his brother Caleb, missing since the Nevada silver rush.',
+        hiddenUntil: 30,
         value: 0,
         behaviors: {
           75:  'He says you gave him back something he had stopped believing he would find.',
@@ -369,7 +396,7 @@ const ACTIONS = [
     },
   },
   {
-    id: 'find_brother', ya: 1814, source: 'solomon', msgType: 'Appeal',
+    id: 'find_brother', ya: 1814, source: 'solomon', msgType: 'Appeal', requiresPassionVisible: { star: 'solomon', passion: 'caleb' },
     dispatch: "Use Your Contacts to Search for Caleb Reed",
     desc: "Solomon has asked nothing of you. But you have riders and contacts across the territories and he does not. You can put word out carefully — staying off federal record, avoiding anything that draws official attention. This will cost you time, favors, and some exposure you cannot fully control.",
     result: "CALEB REED SOUGHT IN NEVADA TERRITORY — Valley merchant's brother believed to be in Comstock district.",
@@ -542,9 +569,20 @@ const QUIET_SEASONS = [
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 const clamp = (v, lo = -100, hi = 100) => Math.max(lo, Math.min(hi, v));
 
-function macropassion(passions) {
+function macropassionValue(passions) {
   const vals = Object.values(passions).map(p => p.value);
-  const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+  return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+function isPassionVisible(stars, starId, passionKey) {
+  const passion = stars[starId]?.passions[passionKey];
+  if (!passion) return false;
+  if (!passion.hiddenUntil) return true;
+  return macropassionValue(stars[starId].passions) >= passion.hiddenUntil;
+}
+
+function macropassion(passions) {
+  const avg = macropassionValue(passions);
   if (avg >= 75)  return { label: 'Bound Ally',         col: '#4a8e42' };
   if (avg >= 50)  return { label: 'Steadfast Friend',   col: '#6a9e42' };
   if (avg >= 30)  return { label: 'Trusted Ally',       col: '#8aae42' };
@@ -1228,45 +1266,48 @@ function thresholdCrossing(currentVal, delta, passion) {
 }
 
 // ─── PASSION BAR (centered spectrum) ─────────────────────────────────────────
-function PassionBar({ passionKey, p, color, stars }) {
+function PassionBar({ passionKey, p, color }) {
+  const T = useContext(ThemeCtx);
+  const [labelHov, setLabelHov] = useState(false);
   const v = p.value;
   const t = getThreshold(v);
   const tCol = thresholdColor(v);
 
-  // Bar geometry: 0 is center (50%). Each point = 0.5% of bar width.
   const fillLeft  = v < 0 ? `${50 + v * 0.5}%` : '50%';
   const fillWidth = `${Math.abs(v) * 0.5}%`;
   const fillColor = v >= 0 ? P.posBar : P.negBar;
 
-  // Build tick marks as CSS gradients so they render as one image — zoom-stable
-  const tickColor = '#7a6048';
-  const centerColor = '#453618';
-  const tickPcts = [12.5, 25, 35, 42.5, 57.5, 65, 75, 87.5]; // ±75, ±50, ±30, ±15
-  const tickGrads = tickPcts.map(p =>
-    `linear-gradient(90deg, transparent calc(${p}% - 0.5px), ${tickColor} calc(${p}% - 0.5px), ${tickColor} calc(${p}% + 0.5px), transparent calc(${p}% + 0.5px))`
+  const tickColor   = T.bdrHi;
+  const centerColor = T.bdrHi;
+  const tickPcts = [12.5, 25, 35, 42.5, 57.5, 65, 75, 87.5];
+  const tickGrads = tickPcts.map(pct =>
+    `linear-gradient(90deg, transparent calc(${pct}% - 0.5px), ${tickColor} calc(${pct}% - 0.5px), ${tickColor} calc(${pct}% + 0.5px), transparent calc(${pct}% + 0.5px))`
   );
   const centerGrad = `linear-gradient(90deg, transparent calc(50% - 0.5px), ${centerColor} calc(50% - 0.5px), ${centerColor} calc(50% + 0.5px), transparent calc(50% + 0.5px))`;
-  const barBg = [...tickGrads, centerGrad, '#1e1808'].join(', ');
+  const barBg = [...tickGrads, centerGrad, T.surf].join(', ');
 
-  // Behavior description at current threshold
-  const bKey     = behaviorKey(v);
+  const bKey    = behaviorKey(v);
   const behavior = p.behaviors[bKey];
 
   return (
     <div style={{ marginBottom: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, alignItems: 'baseline' }}>
-        <span style={{ fontSize: 10, color: '#c0a878', fontFamily: "'Courier Prime', monospace" }}>{p.label}</span>
+        <div style={{ position: 'relative' }} onMouseEnter={() => setLabelHov(true)} onMouseLeave={() => setLabelHov(false)}>
+          <span style={{ fontSize: 10, color: T.inkMid, fontFamily: "'Courier Prime', monospace", cursor: 'default', borderBottom: labelHov ? `1px solid ${T.bdrHi}` : '1px solid transparent', transition: 'border-color 0.15s' }}>{p.label}</span>
+          {labelHov && p.desc && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 5, zIndex: 50, width: 200, background: T.card, border: `1px solid ${T.bdrHi}`, borderRadius: 2, padding: '7px 10px', boxShadow: '0 4px 12px rgba(0,0,0,0.4)', pointerEvents: 'none' }}>
+              <div style={{ fontSize: 9, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.5 }}>{p.desc}</div>
+              <div style={{ position: 'absolute', top: -5, left: 10, width: 8, height: 8, background: T.card, border: `1px solid ${T.bdrHi}`, borderBottom: 'none', borderRight: 'none', transform: 'rotate(45deg)' }} />
+            </div>
+          )}
+        </div>
         <span style={{ fontSize: 9, color: tCol, fontFamily: "'Courier Prime', monospace" }}>{t.label}</span>
       </div>
-      {/* Bar — ticks and center baked into background gradient for zoom stability */}
       <div style={{ position: 'relative', height: 6, background: barBg, borderRadius: 1, overflow: 'visible' }}>
-        {/* Fill */}
         <div style={{ position: 'absolute', left: fillLeft, width: fillWidth, top: 0, bottom: 0, background: fillColor, transition: 'all 0.6s ease', zIndex: 3 }} />
       </div>
-
-      {/* Current behavior */}
       {behavior && (
-        <div style={{ fontSize: 9, color: '#9a8058', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', marginTop: 3, lineHeight: 1.4, borderLeft: `2px solid ${tCol}44`, paddingLeft: 5 }}>
+        <div style={{ fontSize: 9, color: T.inkWhy, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', marginTop: 3, lineHeight: 1.4, borderLeft: `2px solid ${tCol}44`, paddingLeft: 5 }}>
           {behavior}
         </div>
       )}
@@ -1276,42 +1317,21 @@ function PassionBar({ passionKey, p, color, stars }) {
 
 // ─── HOVER LABEL ─────────────────────────────────────────────────────────────
 function HoverLabel({ label, value, valueColor, valueSize = 11, tooltip, align = 'left', flipUp = false }) {
+  const T = useContext(ThemeCtx);
   const [hov, setHov] = useState(false);
   return (
-    <div
-      style={{ position: 'relative', textAlign: align, cursor: 'default' }}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-    >
-      <div style={{ fontSize: 8, color: '#8a7040', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: hov ? '1px solid #40341e' : '1px solid transparent', display: 'inline-block', transition: 'border-color 0.15s' }}>
+    <div style={{ position: 'relative', textAlign: align, cursor: 'default' }}
+      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}>
+      <div style={{ fontSize: 8, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.07em', borderBottom: hov ? `1px solid ${T.bdrHi}` : '1px solid transparent', display: 'inline-block', transition: 'border-color 0.15s' }}>
         {label}
       </div>
       <div style={{ fontSize: valueSize, color: valueColor, fontFamily: valueSize >= 11 ? "'Playfair Display', serif" : "'Courier Prime', monospace", fontStyle: valueSize >= 11 ? 'italic' : 'normal', marginTop: 1 }}>
         {value}
       </div>
       {hov && (
-        <div style={{
-          position: 'absolute',
-          ...(flipUp ? { bottom: '100%', marginBottom: 6 } : { top: '100%', marginTop: 6 }),
-          [align === 'right' ? 'right' : 'left']: 0,
-          width: 160, zIndex: 20,
-          background: '#1e1808', border: '1px solid #453618',
-          padding: '7px 9px', borderRadius: 2,
-          boxShadow: '0 4px 12px rgba(0,0,0,0.6)',
-        }}>
-          <div style={{ fontSize: 9, color: '#b09070', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.5 }}>
-            {tooltip}
-          </div>
-          {/* caret — points down when flipped up, points up otherwise */}
-          <div style={{
-            position: 'absolute',
-            ...(flipUp
-              ? { bottom: -5, [align === 'right' ? 'right' : 'left']: 10, transform: 'rotate(225deg)' }
-              : { top: -5,    [align === 'right' ? 'right' : 'left']: 10, transform: 'rotate(45deg)'  }),
-            width: 8, height: 8,
-            background: '#1e1808', border: '1px solid #453618',
-            borderBottom: 'none', borderRight: 'none',
-          }} />
+        <div style={{ position: 'absolute', ...(flipUp ? { bottom: '100%', marginBottom: 6 } : { top: '100%', marginTop: 6 }), [align === 'right' ? 'right' : 'left']: 0, width: 160, zIndex: 20, background: T.cardHov, border: `1px solid ${T.bdrHi}`, padding: '7px 9px', borderRadius: 2, boxShadow: '0 4px 12px rgba(0,0,0,0.4)' }}>
+          <div style={{ fontSize: 9, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.5 }}>{tooltip}</div>
+          <div style={{ position: 'absolute', ...(flipUp ? { bottom: -5, [align === 'right' ? 'right' : 'left']: 10, transform: 'rotate(225deg)' } : { top: -5, [align === 'right' ? 'right' : 'left']: 10, transform: 'rotate(45deg)' }), width: 8, height: 8, background: T.cardHov, border: `1px solid ${T.bdrHi}`, borderBottom: 'none', borderRight: 'none' }} />
         </div>
       )}
     </div>
@@ -1320,14 +1340,15 @@ function HoverLabel({ label, value, valueColor, valueSize = 11, tooltip, align =
 
 // ─── STAR CARD ────────────────────────────────────────────────────────────────
 function StarCard({ star }) {
+  const T = useContext(ThemeCtx);
   const [expanded, setExpanded] = useState(false);
   const mp  = macropassion(star.passions);
   const rep = reputation(star.fame, star.infamy, star.id);
 
   return (
-    <div className="star-card-enter" style={{ borderLeft: `3px solid ${star.color}`, background: '#1a1508', padding: '11px 11px 11px 13px', borderRadius: '0 3px 3px 0', marginBottom: 16 }}>
+    <div className="star-card-enter" style={{ borderLeft: `3px solid ${star.color}`, background: T.card, padding: '11px 11px 11px 13px', borderRadius: '0 3px 3px 0', marginBottom: 16 }}>
       <div style={{ fontSize: 13, color: star.color, fontFamily: "'Playfair Display', serif", fontWeight: 700, marginBottom: 1 }}>{star.name}</div>
-      <div style={{ fontSize: 9, color: '#8a7040', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>{star.role}</div>
+      <div style={{ fontSize: 9, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>{star.role}</div>
 
       {/* Macropassion */}
       <div style={{ marginBottom: 10 }}>
@@ -1340,43 +1361,37 @@ function StarCard({ star }) {
         />
       </div>
 
-      {/* Passions */}
-      {Object.entries(star.passions).map(([k, p]) => (
-        <PassionBar key={k} passionKey={k} p={p} color={star.color} />
-      ))}
+      {/* Passions — hidden ones revealed only once macropassion threshold is met */}
+      {Object.entries(star.passions)
+        .filter(([, p]) => !p.hiddenUntil || macropassionValue(star.passions) >= p.hiddenUntil)
+        .map(([k, p]) => (
+          <PassionBar key={k} passionKey={k} p={p} color={star.color} />
+        ))}
 
       {/* Fame / Infamy */}
-      <div style={{ borderTop: '1px solid #2a2110', paddingTop: 8, marginTop: 4 }}>
+      <div style={{ borderTop: `1px solid ${T.bdr}`, paddingTop: 8, marginTop: 4 }}>
         <div style={{ display: 'flex', gap: 12 }}>
           {[['Fame', star.fame, '#c9a14a'], ['Infamy', star.infamy, '#8a1818']].map(([lbl, val, col]) => (
             <div key={lbl} style={{ flex: 1 }}>
-              <div style={{ fontSize: 8, color: '#8a7040', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.07em' }}>{lbl}</div>
-              <div style={{ height: 3, background: '#2a2110', marginTop: 2, borderRadius: 1 }}>
+              <div style={{ fontSize: 8, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.07em' }}>{lbl}</div>
+              <div style={{ height: 3, background: T.bdr, marginTop: 2, borderRadius: 1 }}>
                 <div style={{ height: '100%', width: `${val}%`, background: col, borderRadius: 1, transition: 'width 0.5s' }} />
               </div>
-              <div style={{ fontSize: 8, color: '#aa9068', fontFamily: "'Courier Prime', monospace" }}>{val}</div>
+              <div style={{ fontSize: 8, color: T.inkMut, fontFamily: "'Courier Prime', monospace" }}>{val}</div>
             </div>
           ))}
         </div>
       </div>
 
       {/* Community */}
-      <div style={{ marginTop: 8, borderTop: '1px solid #2a2110', paddingTop: 6 }}>
-        <div style={{ fontSize: 8, color: '#8a7040', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>Their community</div>
-        <div style={{ fontSize: 9, color: '#9a8058', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.45 }}>{star.community}</div>
+      <div style={{ marginTop: 8, borderTop: `1px solid ${T.bdr}`, paddingTop: 6 }}>
+        <div style={{ fontSize: 8, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 3 }}>Their community</div>
+        <div style={{ fontSize: 9, color: T.inkWhy, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.45 }}>{star.community}</div>
       </div>
 
       {/* Public Character */}
-      <div style={{ marginTop: 8, borderTop: '1px solid #2a2110', paddingTop: 6 }}>
-        <HoverLabel
-          label="Public Perception"
-          value={rep}
-          valueColor="#a08860"
-          valueSize={10}
-          tooltip="What they say about you in rooms you're not in."
-          align="left"
-          flipUp={true}
-        />
+      <div style={{ marginTop: 8, borderTop: `1px solid ${T.bdr}`, paddingTop: 6 }}>
+        <HoverLabel label="Public Perception" value={rep} valueColor={T.inkFaint} valueSize={10} tooltip="What they say about you in rooms you're not in." align="left" flipUp={true} />
       </div>
     </div>
   );
@@ -1384,113 +1399,85 @@ function StarCard({ star }) {
 
 // ─── ACTION CARD ──────────────────────────────────────────────────────────────
 function ActionCard({ act, stars, dispatch, revealed, isNew, year, season }) {
+  const T = useContext(ThemeCtx);
   const [hov, setHov] = useState(false);
   const [expTip, setExpTip] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const seasonsLeft = act.expires ? seasonsRemaining(year, season, act.expires) : null;
   const sourceStar = act.source ? stars[act.source] : null;
   const sourceLabel = sourceStar ? sourceStar.name.split(' ')[0] + ' ' + (sourceStar.name.split(' ').slice(1).join(' ') || '') : '—';
-  const sourceColor = sourceStar?.color || '#8a7040';
+  const sourceColor = sourceStar?.color || T.inkDim;
   const msgType = act.msgType || 'Dispatch';
 
   const expColor = seasonsLeft === null ? null : seasonsLeft <= 1 ? '#c03018' : seasonsLeft <= 2 ? '#c07020' : '#7a5030';
-  const inactionNote = act.inaction
-    ? 'Consequences follow inaction.'
-    : 'This matter will pass without record.';
+  const inactionNote = act.inaction ? 'Consequences follow inaction.' : 'This matter will pass without record.';
 
   return (
     <div
       className={isNew ? 'action-card-new' : ''}
-      style={{ border: `1px solid ${hov ? '#453618' : '#2a2110'}`, background: hov ? '#1e1a09' : '#1a1508', borderRadius: 2, marginBottom: 14, transition: 'border-color 0.15s, background 0.15s', overflow: 'hidden' }}
+      style={{ border: `1px solid ${hov ? T.bdrHi : T.bdr}`, background: hov ? T.cardHov : T.card, borderRadius: 2, marginBottom: 14, transition: 'border-color 0.15s, background 0.15s', overflow: 'hidden' }}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => { setHov(false); setExpTip(false); }}
     >
       <div style={{ height: 2, background: `linear-gradient(90deg, ${sourceColor}22 0%, ${sourceColor} 100%)` }} />
       <div style={{ padding: '10px 12px 12px' }}>
-        {/* Header row */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, minWidth: 0 }}>
             <span style={{ color: sourceColor, fontSize: 7 }}>◆</span>
-            <span style={{ fontSize: 8, color: sourceColor, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {sourceLabel}
-            </span>
-            <span style={{ fontSize: 8, color: '#8a7040', fontFamily: "'Courier Prime', monospace", letterSpacing: '0.08em' }}>—</span>
-            <span style={{ fontSize: 8, color: '#aa9068', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.08em' }}>{msgType}</span>
+            <span style={{ fontSize: 8, color: sourceColor, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sourceLabel}</span>
+            <span style={{ fontSize: 8, color: T.inkDim, fontFamily: "'Courier Prime', monospace", letterSpacing: '0.08em' }}>—</span>
+            <span style={{ fontSize: 8, color: T.inkMut, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.08em' }}>{msgType}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             {isNew && <div style={{ fontSize: 7, color: '#c9a14a', fontFamily: "'Courier Prime', monospace", letterSpacing: '0.15em', textTransform: 'uppercase' }}>New</div>}
             {seasonsLeft !== null && (
-              <div
-                style={{ position: 'relative' }}
-                onMouseEnter={() => setExpTip(true)}
-                onMouseLeave={() => setExpTip(false)}
-              >
+              <div style={{ position: 'relative' }} onMouseEnter={() => setExpTip(true)} onMouseLeave={() => setExpTip(false)}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 3, cursor: 'default', padding: '1px 5px', border: `1px solid ${expColor}55`, borderRadius: 2, background: `${expColor}18` }}>
                   <span style={{ fontSize: 9, color: expColor, lineHeight: 1 }}>⏱</span>
                   <span style={{ fontSize: 7, color: expColor, fontFamily: "'Courier Prime', monospace", letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>{seasonsLeft}S</span>
                 </div>
                 {expTip && (
-                  <div style={{
-                    position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 100,
-                    background: '#1a1408', border: `1px solid ${expColor}66`, borderRadius: 2,
-                    padding: '7px 10px', width: 180, boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-                    pointerEvents: 'none',
-                  }}>
+                  <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 100, background: T.hdr, border: `1px solid ${expColor}66`, borderRadius: 2, padding: '7px 10px', width: 180, boxShadow: '0 4px 12px rgba(0,0,0,0.3)', pointerEvents: 'none' }}>
                     <div style={{ fontSize: 8, color: expColor, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 4, fontWeight: 700 }}>
                       {seasonsLeft === 1 ? 'Final Season' : `Expires in ${seasonsLeft} seasons`}
                     </div>
-                    <div style={{ fontSize: 8, color: '#8a7040', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.5 }}>
-                      {inactionNote}
-                    </div>
+                    <div style={{ fontSize: 8, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.5 }}>{inactionNote}</div>
                   </div>
                 )}
               </div>
             )}
-            {/* Collapse toggle */}
             <button
               onClick={e => { e.stopPropagation(); setCollapsed(c => !c); }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8a7040', fontSize: 10, padding: '0 2px', lineHeight: 1, fontFamily: "'Courier Prime', monospace" }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.inkDim, fontSize: 10, padding: '0 2px', lineHeight: 1, fontFamily: "'Courier Prime', monospace" }}
               title={collapsed ? 'Expand' : 'Collapse'}
             >{collapsed ? '▼' : '▲'}</button>
           </div>
         </div>
 
-        {/* Title — always visible, click to act */}
         <div
-          style={{ fontSize: 13, color: '#e4d4a8', fontFamily: "'Playfair Display', serif", fontWeight: 700, lineHeight: 1.3, marginBottom: collapsed ? 0 : 6, cursor: 'pointer' }}
+          style={{ fontSize: 13, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 700, lineHeight: 1.3, marginBottom: collapsed ? 0 : 6, cursor: 'pointer' }}
           onClick={() => dispatch({ type: 'ACT', id: act.id })}
-        >
-          {act.dispatch}
-        </div>
+        >{act.dispatch}</div>
 
-        {/* Collapsible body */}
         {!collapsed && (
           <div onClick={() => dispatch({ type: 'ACT', id: act.id })} style={{ cursor: 'pointer' }}>
-            <div style={{ fontSize: 10, color: '#aa9068', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.55, marginBottom: 10 }}>
-              {act.desc}
-            </div>
-
-            {/* Effects with explanations */}
-            <div style={{ borderTop: '1px solid #2a2110', paddingTop: 8 }}>
-              <div style={{ fontSize: 8, color: '#8a7040', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6, fontFamily: "'Courier Prime', monospace" }}>
-                Known Effects & Consequences
-              </div>
-              {act.effects.filter(e => revealed.includes(e.star)).map((e, i, arr) => {
-                const star     = stars[e.star];
-                const passion  = star?.passions[e.passion];
-                const ben      = e.delta > 0;
+            <div style={{ fontSize: 10, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.55, marginBottom: 10 }}>{act.desc}</div>
+            <div style={{ borderTop: `1px solid ${T.bdr}`, paddingTop: 8 }}>
+              <div style={{ fontSize: 8, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6, fontFamily: "'Courier Prime', monospace" }}>Known Effects & Consequences</div>
+              {act.effects.filter(e => revealed.includes(e.star) && isPassionVisible(stars, e.star, e.passion)).map((e, i, arr) => {
+                const star    = stars[e.star];
+                const passion = star?.passions[e.passion];
+                const ben     = e.delta > 0;
                 const crossing = passion ? thresholdCrossing(passion.value, e.delta, passion) : null;
                 return (
-                  <div key={i} style={{ marginBottom: 8, paddingBottom: 8, borderBottom: i < arr.length - 1 ? '1px solid #22190a' : 'none' }}>
+                  <div key={i} style={{ marginBottom: 8, paddingBottom: 8, borderBottom: i < arr.length - 1 ? `1px solid ${T.bdrSub}` : 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
                       <span style={{ color: star?.color, fontSize: 7 }}>◆</span>
                       <span style={{ flex: 1, fontFamily: "'Courier Prime', monospace", fontSize: 10 }}>
-                        <span style={{ color: '#c0a878' }}>{star?.name?.split(' ')[0]} · </span>
+                        <span style={{ color: T.inkMid }}>{star?.name?.split(' ')[0]} · </span>
                         <span style={{ color: ben ? '#4a8e42' : '#9a3020', fontWeight: 700 }}>{passion?.label}{deltaSymbol(e.delta)}</span>
                       </span>
                     </div>
-                    <div style={{ fontSize: 9, color: '#9a8058', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.4, paddingLeft: 12 }}>
-                      {e.why}
-                    </div>
+                    <div style={{ fontSize: 9, color: T.inkWhy, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.4, paddingLeft: 12 }}>{e.why}</div>
                     {crossing && (
                       <div style={{ marginTop: 5, paddingLeft: 12 }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: `${crossing.color}18`, border: `1px solid ${crossing.color}44`, borderRadius: 2, padding: '2px 6px', marginBottom: crossing.behavior ? 3 : 0 }}>
@@ -1499,9 +1486,7 @@ function ActionCard({ act, stars, dispatch, revealed, isNew, year, season }) {
                           </span>
                         </div>
                         {crossing.behavior && (
-                          <div style={{ fontSize: 9, color: crossing.color, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.4, opacity: 0.85 }}>
-                            {crossing.behavior}
-                          </div>
+                          <div style={{ fontSize: 9, color: crossing.color, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.4, opacity: 0.85 }}>{crossing.behavior}</div>
                         )}
                       </div>
                     )}
@@ -1518,54 +1503,50 @@ function ActionCard({ act, stars, dispatch, revealed, isNew, year, season }) {
 
 // ─── LOG ENTRY ────────────────────────────────────────────────────────────────
 function LogEntry({ entry, stars, revealed, isNew }) {
+  const T = useContext(ThemeCtx);
   if (entry.isQuiet) return (
-    <div style={{ borderBottom: '1px solid #2a2110', paddingBottom: 12, marginBottom: 12, opacity: 0.45 }}>
-      <div style={{ fontSize: 8, color: '#8a7040', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>{entry.year}, {entry.season}</div>
-      <div style={{ fontSize: 10, color: '#aa9068', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.5 }}>— {entry.headline} —</div>
-      <div style={{ fontSize: 10, color: '#8a7040', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.65, marginTop: 4 }}>{entry.body}</div>
+    <div style={{ borderBottom: `1px solid ${T.bdr}`, paddingBottom: 12, marginBottom: 12, opacity: 0.45 }}>
+      <div style={{ fontSize: 8, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>{entry.year}, {entry.season}</div>
+      <div style={{ fontSize: 10, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.5 }}>— {entry.headline} —</div>
+      <div style={{ fontSize: 10, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.65, marginTop: 4 }}>{entry.body}</div>
     </div>
   );
 
-  // Ruin entry — black border, full-width, final
   if (entry.isRuin) return (
-    <div style={{ border: '2px solid #8a1818', borderRadius: 2, background: '#120808', padding: '16px 16px 18px', marginBottom: 20 }}>
+    <div style={{ border: '2px solid #8a1818', borderRadius: 2, background: T.defBg, padding: '16px 16px 18px', marginBottom: 20 }}>
       <div style={{ fontSize: 7, color: '#8a1818', textTransform: 'uppercase', letterSpacing: '0.2em', fontFamily: "'Courier Prime', monospace", marginBottom: 8 }}>{entry.year}, {entry.season} — Final Entry</div>
-      <div style={{ fontSize: 15, color: '#e4c0c0', fontFamily: "'Playfair Display', serif", fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.2, marginBottom: 10 }}>{entry.headline}</div>
-      <div style={{ fontSize: 11, color: '#aa7060', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.7 }}>{entry.body}</div>
+      <div style={{ fontSize: 15, color: '#c04040', fontFamily: "'Playfair Display', serif", fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.2, marginBottom: 10 }}>{entry.headline}</div>
+      <div style={{ fontSize: 11, color: '#9a5040', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.7 }}>{entry.body}</div>
     </div>
   );
 
-  // Newspaper dispatch — dateline clipping style
   if (entry.isDispatch) return (
-    <div style={{ borderBottom: '1px solid #2a2110', paddingBottom: 16, marginBottom: 18 }}>
+    <div style={{ borderBottom: `1px solid ${T.bdr}`, paddingBottom: 16, marginBottom: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <span style={{ fontSize: 7, color: '#8a7040', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.1em' }}>{entry.year}, {entry.season}</span>
+        <span style={{ fontSize: 7, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.1em' }}>{entry.year}, {entry.season}</span>
         {isNew && <span style={{ fontSize: 7, color: '#c9a14a', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.15em', marginLeft: 'auto' }}>● New</span>}
       </div>
-      <div style={{ background: '#141008', border: '1px solid #2a2110', borderLeft: '3px solid #6a5828', borderRadius: 2, padding: '10px 12px 12px' }}>
-        <div style={{ fontSize: 7, color: '#6a5828', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.18em', marginBottom: 6, borderBottom: '1px solid #2a2110', paddingBottom: 5 }}>
+      <div style={{ background: T.surf, border: `1px solid ${T.bdr}`, borderLeft: `3px solid ${T.bdrHi}`, borderRadius: 2, padding: '10px 12px 12px' }}>
+        <div style={{ fontSize: 7, color: T.inkFaint, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.18em', marginBottom: 6, borderBottom: `1px solid ${T.bdr}`, paddingBottom: 5 }}>
           ✦ {entry.dateline || 'The Territorial Standard'}
         </div>
-        <div style={{ fontSize: 13, color: '#d4c090', fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.25, marginBottom: 7, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{entry.headline}</div>
-        <div style={{ fontSize: 10, color: '#8a7848', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.65 }}>{entry.body}</div>
+        <div style={{ fontSize: 13, color: T.dispInk, fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.25, marginBottom: 7, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{entry.headline}</div>
+        <div style={{ fontSize: 10, color: T.dispFaint, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.65 }}>{entry.body}</div>
       </div>
     </div>
   );
 
-  // Inaction entry — muted rust, marks what did not happen
   if (entry.isInaction) return (
-    <div style={{ borderBottom: '1px solid #2a2110', paddingBottom: 16, marginBottom: 18 }}>
+    <div style={{ borderBottom: `1px solid ${T.bdr}`, paddingBottom: 16, marginBottom: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
         <span style={{ fontSize: 9, color: '#7a4030' }}>◌</span>
         <span style={{ fontSize: 8, color: '#7a4030', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.1em' }}>{entry.year}, {entry.season} — Window Closed</span>
         {isNew && <span style={{ fontSize: 7, color: '#c9a14a', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.15em', marginLeft: 'auto' }}>● New</span>}
       </div>
-      <div style={{ background: '#110a08', border: '1px solid #2a2110', borderLeft: '3px solid #7a4030', borderRadius: 2, padding: '10px 12px 12px' }}>
-        <div style={{ fontSize: 7, color: '#7a4030', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.18em', marginBottom: 5 }}>
-          ◌ No Action Taken
-        </div>
-        <div style={{ fontSize: 13, color: '#c09070', fontFamily: "'Playfair Display', serif", fontWeight: 700, lineHeight: 1.25, marginBottom: 7, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{entry.headline}</div>
-        <div style={{ fontSize: 10, color: '#7a6048', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.65, marginBottom: entry.effects?.length ? 10 : 0 }}>{entry.body}</div>
+      <div style={{ background: T.inactBg, border: `1px solid ${T.bdr}`, borderLeft: '3px solid #7a4030', borderRadius: 2, padding: '10px 12px 12px' }}>
+        <div style={{ fontSize: 7, color: '#7a4030', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.18em', marginBottom: 5 }}>◌ No Action Taken</div>
+        <div style={{ fontSize: 13, color: T.inkMut, fontFamily: "'Playfair Display', serif", fontWeight: 700, lineHeight: 1.25, marginBottom: 7, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{entry.headline}</div>
+        <div style={{ fontSize: 10, color: T.inkWhy, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.65, marginBottom: entry.effects?.length ? 10 : 0 }}>{entry.body}</div>
         {entry.effects?.filter(e => revealed.includes(e.star)).map((e, i) => {
           const star = stars[e.star];
           const passion = star?.passions[e.passion];
@@ -1573,7 +1554,7 @@ function LogEntry({ entry, stars, revealed, isNew }) {
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
               <span style={{ color: star?.color, fontSize: 7 }}>◆</span>
               <span style={{ fontFamily: "'Courier Prime', monospace", fontSize: 9 }}>
-                <span style={{ color: '#9a7858' }}>{star?.name?.split(' ')[0]} · </span>
+                <span style={{ color: T.inkMid }}>{star?.name?.split(' ')[0]} · </span>
                 <span style={{ color: e.delta > 0 ? '#4a8e42' : '#9a3020', fontWeight: 700 }}>{passion?.label}{deltaSymbol(e.delta)}</span>
               </span>
             </div>
@@ -1583,49 +1564,45 @@ function LogEntry({ entry, stars, revealed, isNew }) {
     </div>
   );
 
-  // Use hidden body if any Stars in this entry's effects are unknown
   const hasUnknownStar = entry.effects.some(e => e.star && !revealed.includes(e.star));
   const bodyText = (hasUnknownStar && entry.bodyHidden) ? entry.bodyHidden : entry.body;
-  const visibleEffects = entry.effects.filter(e => !e.star || revealed.includes(e.star));
+  const visibleEffects = entry.effects.filter(e => (!e.star || revealed.includes(e.star)) && isPassionVisible(stars, e.star, e.passion));
 
   const D = entry.isDeferred;
   const R = entry.isReactive && !D;
   const accentColor = D ? '#8a1818' : R ? '#6a4a9a' : isNew ? '#c9a14a' : null;
-  const bgColor     = D ? '#110606'  : R ? '#0e0a18'  : isNew ? '#161208' : 'transparent';
-  const borderColor = D ? '#501010'  : R ? '#3a2060'  : isNew ? '#453618' : '#2a2110';
+  const bgColor     = D ? T.defBg   : R ? T.reactBg : isNew ? T.newBg  : 'transparent';
+  const borderColor = D ? '#501010' : R ? '#3a2060' : isNew ? T.bdrHi  : T.bdr;
   return (
     <div style={{ borderBottom: `1px solid ${borderColor}`, marginBottom: 18, background: bgColor, borderLeft: accentColor ? `3px solid ${accentColor}` : 'none', padding: (accentColor || isNew) ? '12px 14px 14px' : '0 0 16px 0', borderRadius: (accentColor || isNew) ? 2 : 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
         {D && <span style={{ fontSize: 12, color: '#8a1818' }}>⚡</span>}
         {R && <span style={{ fontSize: 10, color: '#6a4a9a' }}>◈</span>}
-        <span style={{ fontSize: 8, color: '#aa9068', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.1em' }}>{entry.year}, {entry.season}</span>
+        <span style={{ fontSize: 8, color: T.inkMut, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.1em' }}>{entry.year}, {entry.season}</span>
         {R && <span style={{ fontSize: 7, color: '#6a4a9a', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.15em' }}>— Narrative Event</span>}
         {isNew && !D && !R && <span style={{ fontSize: 7, color: '#c9a14a', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.15em', marginLeft: 'auto' }}>● New</span>}
       </div>
       <div style={{ height: '0.5px', background: borderColor, marginBottom: 8 }} />
-      <div style={{ fontSize: 14, lineHeight: 1.3, marginBottom: 6, color: D ? '#c03030' : R ? '#c0a8e8' : '#e4d4a8', fontFamily: "'Playfair Display', serif", fontWeight: (D || R) ? 900 : 700, textTransform: D ? 'uppercase' : 'none', letterSpacing: D ? '0.03em' : 'normal' }}>
+      <div style={{ fontSize: 14, lineHeight: 1.3, marginBottom: 6, color: D ? '#c03030' : R ? '#8060c0' : T.ink, fontFamily: "'Playfair Display', serif", fontWeight: (D || R) ? 900 : 700, textTransform: D ? 'uppercase' : 'none', letterSpacing: D ? '0.03em' : 'normal' }}>
         {entry.headline}
       </div>
-      <div style={{ fontSize: 11, color: '#aa9068', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.65, marginBottom: 10 }}>
-        {bodyText}
-      </div>
-      {D && <div style={{ fontSize: 9, color: '#8a7040', fontFamily: "'Courier Prime', monospace", marginBottom: 8, borderTop: '1px solid #501010', paddingTop: 6 }}>Origin: {entry.decision}</div>}
-      {/* Effect summary */}
+      <div style={{ fontSize: 11, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.65, marginBottom: 10 }}>{bodyText}</div>
+      {D && <div style={{ fontSize: 9, color: T.inkDim, fontFamily: "'Courier Prime', monospace", marginBottom: 8, borderTop: '1px solid #501010', paddingTop: 6 }}>Origin: {entry.decision}</div>}
       <div>
         {visibleEffects.filter(e => e.passion !== 'infamy_self').map((e, i) => {
           const star = stars?.[e.star];
-          const ben = e.delta > 0;
+          const ben  = e.delta > 0;
           return (
             <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 5, marginBottom: 5 }}>
-              <span style={{ color: star?.color || '#aa9068', fontSize: 7, marginTop: 3 }}>◆</span>
+              <span style={{ color: star?.color || T.inkMut, fontSize: 7, marginTop: 3 }}>◆</span>
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: 9, fontFamily: "'Courier Prime', monospace" }}>
-                    <span style={{ color: '#c0a878' }}>{star?.name?.split(' ')[0] || '—'} · </span>
+                    <span style={{ color: T.inkMid }}>{star?.name?.split(' ')[0] || '—'} · </span>
                     <span style={{ color: ben ? '#4a8e42' : '#9a3020', fontWeight: 700 }}>{star?.passions[e.passion]?.label || e.passion}{deltaSymbol(e.delta)}</span>
                   </span>
                 </div>
-                {e.why && <div style={{ fontSize: 9, color: '#9a8058', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.4, marginTop: 1 }}>{e.why}</div>}
+                {e.why && <div style={{ fontSize: 9, color: T.inkWhy, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.4, marginTop: 1 }}>{e.why}</div>}
               </div>
             </div>
           );
@@ -1647,63 +1624,28 @@ const SEASON_VISUALS = {
 
 // ─── CONVERGENCE MODAL ───────────────────────────────────────────────────────
 function ConvergenceModal({ event, stars, dispatch }) {
+  const T = useContext(ThemeCtx);
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 200,
-      background: 'rgba(8,7,4,0.88)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: 24,
-    }}>
-      <div style={{
-        maxWidth: 520, width: '100%',
-        background: '#1a1408', border: '1px solid #453618',
-        borderTop: '3px solid #c9a14a',
-        padding: '28px 28px 24px',
-        animation: 'fadeInModal 0.45s ease-out forwards',
-        boxShadow: '0 12px 48px rgba(0,0,0,0.7)',
-      }}>
-        <div style={{ fontSize: 7, color: '#8a7040', textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 10 }}>
-          Convergence — A Forced Choice
-        </div>
-        <div style={{ fontSize: 18, color: '#e4d4a8', fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.2, marginBottom: 14 }}>
-          {event.headline}
-        </div>
-        <div style={{ fontSize: 11, color: '#aa9068', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.7, marginBottom: 22, borderBottom: '1px solid #2a2110', paddingBottom: 18 }}>
-          {event.body}
-        </div>
-        <div style={{ fontSize: 7, color: '#8a7040', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 10 }}>
-          How do you stand?
-        </div>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: T.modalBg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ maxWidth: 520, width: '100%', background: T.hdr, border: `1px solid ${T.bdrHi}`, borderTop: '3px solid #c9a14a', padding: '28px 28px 24px', animation: 'fadeInModal 0.45s ease-out forwards', boxShadow: '0 12px 48px rgba(0,0,0,0.4)' }}>
+        <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 10 }}>Convergence — A Forced Choice</div>
+        <div style={{ fontSize: 18, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.2, marginBottom: 14 }}>{event.headline}</div>
+        <div style={{ fontSize: 11, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.7, marginBottom: 22, borderBottom: `1px solid ${T.bdr}`, paddingBottom: 18 }}>{event.body}</div>
+        <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 10 }}>How do you stand?</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {event.choices.map(choice => (
-            <button
-              key={choice.id}
-              onClick={() => dispatch({ type: 'CHOOSE', eventId: event.id, choiceId: choice.id })}
-              style={{
-                background: 'transparent', border: '1px solid #2a2110',
-                padding: '12px 14px', textAlign: 'left', cursor: 'pointer',
-                borderRadius: 2, transition: 'border-color 0.15s, background 0.15s',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = '#c9a14a'; e.currentTarget.style.background = '#211c0a'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a2110'; e.currentTarget.style.background = 'transparent'; }}
-            >
-              <div style={{ fontSize: 11, color: '#e4d4a8', fontFamily: "'Playfair Display', serif", fontWeight: 700, lineHeight: 1.3, marginBottom: 5 }}>
-                {choice.label}
-              </div>
-              <div style={{ fontSize: 9, color: '#8a7040', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.5 }}>
-                {choice.desc}
-              </div>
-              {/* Show known effects */}
+            <button key={choice.id} onClick={() => dispatch({ type: 'CHOOSE', eventId: event.id, choiceId: choice.id })}
+              style={{ background: 'transparent', border: `1px solid ${T.bdr}`, padding: '12px 14px', textAlign: 'left', cursor: 'pointer', borderRadius: 2, transition: 'border-color 0.15s, background 0.15s' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#c9a14a'; e.currentTarget.style.background = T.cardHov; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = T.bdr; e.currentTarget.style.background = 'transparent'; }}>
+              <div style={{ fontSize: 11, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 700, lineHeight: 1.3, marginBottom: 5 }}>{choice.label}</div>
+              <div style={{ fontSize: 9, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.5 }}>{choice.desc}</div>
               {choice.effects.filter(e => stars[e.star]).length > 0 && (
-                <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #2a2110', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.bdr}`, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {choice.effects.map((e, i) => {
                     const star = stars[e.star];
                     if (!star) return null;
-                    return (
-                      <span key={i} style={{ fontSize: 8, fontFamily: "'Courier Prime', monospace", color: e.delta > 0 ? '#4a8e42' : '#9a3020' }}>
-                        {star.name.split(' ')[0]} {e.delta > 0 ? '+' : ''}{e.delta}
-                      </span>
-                    );
+                    return <span key={i} style={{ fontSize: 8, fontFamily: "'Courier Prime', monospace", color: e.delta > 0 ? '#4a8e42' : '#9a3020' }}>{star.name.split(' ')[0]} {e.delta > 0 ? '+' : ''}{e.delta}</span>;
                   })}
                 </div>
               )}
@@ -1715,32 +1657,30 @@ function ConvergenceModal({ event, stars, dispatch }) {
   );
 }
 
-// ─── GUEST MODAL ──────────────────────────────────────────────────────────────
 function GuestModal({ guest, dispatch }) {
+  const T = useContext(ThemeCtx);
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(8,7,4,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style={{ maxWidth: 520, width: '100%', background: '#1a1408', border: '1px solid #453618', borderTop: '3px solid #aa9068', padding: '28px 28px 24px', animation: 'fadeInModal 0.45s ease-out forwards', boxShadow: '0 12px 48px rgba(0,0,0,0.75)' }}>
-        <div style={{ fontSize: 7, color: '#8a7040', textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 6 }}>A Visitor at the Door</div>
-        <div style={{ fontSize: 20, color: '#e4d4a8', fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.2, marginBottom: 4 }}>{guest.name}</div>
-        <div style={{ fontSize: 9, color: '#8a7040', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 16 }}>{guest.role}</div>
-        <div style={{ fontSize: 11, color: '#aa9068', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.75, marginBottom: 14, paddingBottom: 14, borderBottom: '1px solid #2a2110' }}>{guest.arrival}</div>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: T.modalBg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ maxWidth: 520, width: '100%', background: T.hdr, border: `1px solid ${T.bdrHi}`, borderTop: `3px solid ${T.inkMut}`, padding: '28px 28px 24px', animation: 'fadeInModal 0.45s ease-out forwards', boxShadow: '0 12px 48px rgba(0,0,0,0.4)' }}>
+        <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 6 }}>A Visitor at the Door</div>
+        <div style={{ fontSize: 20, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.2, marginBottom: 4 }}>{guest.name}</div>
+        <div style={{ fontSize: 9, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 16 }}>{guest.role}</div>
+        <div style={{ fontSize: 11, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.75, marginBottom: 14, paddingBottom: 14, borderBottom: `1px solid ${T.bdr}` }}>{guest.arrival}</div>
         {guest.moral && (
-          <div style={{ fontSize: 9, color: '#6a5828', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.6, marginBottom: 18, borderLeft: '2px solid #453618', paddingLeft: 10 }}>{guest.moral}</div>
+          <div style={{ fontSize: 9, color: T.inkFaint, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.6, marginBottom: 18, borderLeft: `2px solid ${T.bdrHi}`, paddingLeft: 10 }}>{guest.moral}</div>
         )}
-        <div style={{ fontSize: 7, color: '#8a7040', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 10 }}>What do you do?</div>
+        <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 10 }}>What do you do?</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {guest.choices.map(choice => (
-            <button key={choice.id}
-              onClick={() => dispatch({ type: 'GUEST_CHOOSE', guestId: guest.id, choiceId: choice.id })}
-              style={{ background: 'transparent', border: '1px solid #2a2110', padding: '11px 14px', textAlign: 'left', cursor: 'pointer', borderRadius: 2, transition: 'border-color 0.15s, background 0.15s' }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = '#aa9068'; e.currentTarget.style.background = '#211c0a'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a2110'; e.currentTarget.style.background = 'transparent'; }}>
-              <div style={{ fontSize: 11, color: '#e4d4a8', fontFamily: "'Playfair Display', serif", fontWeight: 700, marginBottom: 4 }}>{choice.label}</div>
-              <div style={{ fontSize: 9, color: '#8a7040', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.5 }}>{choice.desc}</div>
+            <button key={choice.id} onClick={() => dispatch({ type: 'GUEST_CHOOSE', guestId: guest.id, choiceId: choice.id })}
+              style={{ background: 'transparent', border: `1px solid ${T.bdr}`, padding: '11px 14px', textAlign: 'left', cursor: 'pointer', borderRadius: 2, transition: 'border-color 0.15s, background 0.15s' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = T.inkMut; e.currentTarget.style.background = T.cardHov; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = T.bdr; e.currentTarget.style.background = 'transparent'; }}>
+              <div style={{ fontSize: 11, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 700, marginBottom: 4 }}>{choice.label}</div>
+              <div style={{ fontSize: 9, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.5 }}>{choice.desc}</div>
             </button>
           ))}
         </div>
-        <div style={{ fontSize: 8, color: '#453618', fontFamily: "'Courier Prime', monospace", marginTop: 14, fontStyle: 'italic' }}>Advance the season without deciding and they will move on unanswered.</div>
       </div>
     </div>
   );
@@ -1748,51 +1688,73 @@ function GuestModal({ guest, dispatch }) {
 
 // ─── HOMESTEAD PANEL ──────────────────────────────────────────────────────────
 function HomesteadPanel({ homesteadLog }) {
+  const T = useContext(ThemeCtx);
   if (!homesteadLog || homesteadLog.length === 0) return null;
   return (
-    <div style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid #2a2110' }}>
-      <div style={{ fontSize: 7, color: '#8a7040', textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 10 }}>The Crossroads — Who Has Passed Through</div>
+    <div style={{ marginTop: 18, paddingTop: 14, borderTop: `1px solid ${T.bdr}` }}>
+      <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 10 }}>The Crossroads — Who Has Passed Through</div>
       {homesteadLog.map((item, i) => (
-        <div key={i} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid #1e1808' }}>
-          <div style={{ fontSize: 7, color: '#6a5030', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 3 }}>{item.year}, {item.season}</div>
-          <div style={{ fontSize: 10, color: '#8a7040', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.55 }}>{item.note}</div>
+        <div key={i} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: `1px solid ${T.bdrSub}` }}>
+          <div style={{ fontSize: 7, color: T.inkFaint, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 3 }}>{item.year}, {item.season}</div>
+          <div style={{ fontSize: 10, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.55 }}>{item.note}</div>
         </div>
       ))}
     </div>
   );
 }
 
+// ─── INTRO SCREEN ─────────────────────────────────────────────────────────────
+function IntroScreen({ onBegin, T }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 400, background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, fontFamily: "'Courier Prime', monospace" }}>
+      <div style={{ maxWidth: 520, width: '100%', textAlign: 'center' }}>
+        <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.3em', marginBottom: 20 }}>The Territorial Standard · Est. 1810</div>
+        <div style={{ fontSize: 11, color: T.inkFaint, fontFamily: "'Playfair Display', serif", fontStyle: 'italic', marginBottom: 16 }}>✦ ✦ ✦</div>
+        <div style={{ fontSize: 38, color: '#c9a14a', fontFamily: "'Playfair Display', serif", fontWeight: 900, letterSpacing: '0.06em', lineHeight: 1, marginBottom: 10 }}>MANIFEST</div>
+        <div style={{ fontSize: 9, color: T.inkMut, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.25em', marginBottom: 32 }}>California Territory · 1810</div>
+        <div style={{ fontSize: 11, color: T.inkMut, fontFamily: "'Playfair Display', serif", fontStyle: 'italic', lineHeight: 1.85, marginBottom: 12, borderTop: `1px solid ${T.bdr}`, borderBottom: `1px solid ${T.bdr}`, padding: '22px 0' }}>
+          You have arrived in the valley with land, some money, and a name not yet known.<br /><br />
+          Three lives run alongside yours — a Californio heir, a freedman trader, a railroad surveyor. What you do for them, and to them, will determine whether you endure.
+        </div>
+        <div style={{ fontSize: 8, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.6, marginBottom: 32 }}>
+          Decisions accumulate. Some arrive as choices. Others arrive as consequences.
+        </div>
+        <button
+          onClick={onBegin}
+          style={{ background: 'transparent', border: `1px solid #c9a14a`, color: '#c9a14a', padding: '10px 32px', fontFamily: "'Courier Prime', monospace", fontSize: 10, cursor: 'pointer', letterSpacing: '0.18em', textTransform: 'uppercase', borderRadius: 2 }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#c9a14a'; e.currentTarget.style.color = T.bg; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#c9a14a'; }}>
+          Begin — 1810 →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── RUIN SCREEN ──────────────────────────────────────────────────────────────
 function RuinScreen({ state, dispatch }) {
+  const T = useContext(ThemeCtx);
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: '#0a0806', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, fontFamily: "'Courier Prime', monospace" }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: T.ruinBg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, fontFamily: "'Courier Prime', monospace" }}>
       <div style={{ maxWidth: 560, width: '100%', textAlign: 'center' }}>
-        <div style={{ fontSize: 7, color: '#8a1818', textTransform: 'uppercase', letterSpacing: '0.3em', marginBottom: 20 }}>
-          {state.season}, {state.year} — The Territory Has Spoken
-        </div>
-        <div style={{ fontSize: 11, color: '#453618', fontFamily: "'Playfair Display', serif", fontStyle: 'italic', marginBottom: 14 }}>
-          ✦ ✦ ✦
-        </div>
-        <div style={{ fontSize: 26, color: '#c09070', fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.15, marginBottom: 24, letterSpacing: '0.02em' }}>
-          {state.ruinHeadline}
-        </div>
-        <div style={{ fontSize: 12, color: '#8a6040', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.85, marginBottom: 36, borderTop: '1px solid #2a2110', borderBottom: '1px solid #2a2110', padding: '20px 0' }}>
-          {state.ruinReason}
-        </div>
+        <div style={{ fontSize: 7, color: '#8a1818', textTransform: 'uppercase', letterSpacing: '0.3em', marginBottom: 20 }}>{state.season}, {state.year} — The Territory Has Spoken</div>
+        <div style={{ fontSize: 11, color: T.inkFaint, fontFamily: "'Playfair Display', serif", fontStyle: 'italic', marginBottom: 14 }}>✦ ✦ ✦</div>
+        <div style={{ fontSize: 26, color: T.inkMut, fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.15, marginBottom: 24, letterSpacing: '0.02em' }}>{state.ruinHeadline}</div>
+        <div style={{ fontSize: 12, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.85, marginBottom: 36, borderTop: `1px solid ${T.bdr}`, borderBottom: `1px solid ${T.bdr}`, padding: '20px 0' }}>{state.ruinReason}</div>
         {state.homesteadLog.length > 0 && (
-          <div style={{ marginBottom: 32, textAlign: 'left', background: '#141008', border: '1px solid #2a2110', borderRadius: 2, padding: '14px 16px' }}>
-            <div style={{ fontSize: 7, color: '#6a5030', textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 10 }}>Those Who Passed Through the Crossroads</div>
+          <div style={{ marginBottom: 32, textAlign: 'left', background: T.ruinCardBg, border: `1px solid ${T.bdr}`, borderRadius: 2, padding: '14px 16px' }}>
+            <div style={{ fontSize: 7, color: T.inkFaint, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 10 }}>Those Who Passed Through the Crossroads</div>
             {state.homesteadLog.slice(0, 6).map((item, i) => (
-              <div key={i} style={{ fontSize: 10, color: '#6a5828', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.55, marginBottom: 6 }}>
-                <span style={{ color: '#453618' }}>{item.year} — </span>{item.note}
+              <div key={i} style={{ fontSize: 10, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.55, marginBottom: 6 }}>
+                <span style={{ color: T.bdrHi }}>{item.year} — </span>{item.note}
               </div>
             ))}
           </div>
         )}
         <button
           onClick={() => dispatch({ type: 'RESET' })}
-          style={{ background: 'transparent', border: '1px solid #8a7040', color: '#c9a14a', padding: '10px 28px', fontFamily: "'Courier Prime', monospace", fontSize: 10, cursor: 'pointer', letterSpacing: '0.15em', textTransform: 'uppercase', borderRadius: 2 }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#c9a14a'; e.currentTarget.style.color = '#1a1408'; }}
+          style={{ background: 'transparent', border: `1px solid ${T.bdrHi}`, color: '#c9a14a', padding: '10px 28px', fontFamily: "'Courier Prime', monospace", fontSize: 10, cursor: 'pointer', letterSpacing: '0.15em', textTransform: 'uppercase', borderRadius: 2 }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#c9a14a'; e.currentTarget.style.color = T.hdr; }}
           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#c9a14a'; }}>
           Begin Again — 1810
         </button>
@@ -1802,32 +1764,36 @@ function RuinScreen({ state, dispatch }) {
 }
 
 // ─── HEADER MENU ──────────────────────────────────────────────────────────────
-function HeaderMenu({ dispatch }) {
+function HeaderMenu({ dispatch, darkMode, setDarkMode }) {
+  const T = useContext(ThemeCtx);
   const [open, setOpen] = useState(false);
   return (
     <div style={{ position: 'relative', flexShrink: 0 }}>
       <button
         onClick={() => setOpen(o => !o)}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', color: open ? '#c9a14a' : '#8a7040', fontSize: 16, lineHeight: 1, padding: '4px 2px', fontFamily: "'Courier Prime', monospace", transition: 'color 0.15s' }}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', color: open ? '#c9a14a' : T.inkDim, fontSize: 16, lineHeight: 1, padding: '4px 2px', fontFamily: "'Courier Prime', monospace", transition: 'color 0.15s' }}
         onMouseEnter={e => e.currentTarget.style.color = '#c9a14a'}
-        onMouseLeave={e => e.currentTarget.style.color = open ? '#c9a14a' : '#8a7040'}
+        onMouseLeave={e => e.currentTarget.style.color = open ? '#c9a14a' : T.inkDim}
         title="Menu"
       >☰</button>
       {open && (
         <>
-          {/* backdrop to close */}
           <div style={{ position: 'fixed', inset: 0, zIndex: 49 }} onClick={() => setOpen(false)} />
-          <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 50, background: '#1a1408', border: '1px solid #453618', borderRadius: 2, minWidth: 140, boxShadow: '0 4px 16px rgba(0,0,0,0.6)' }}>
-            <div style={{ fontSize: 7, color: '#8a7040', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.15em', padding: '8px 12px 4px', borderBottom: '1px solid #2a2110' }}>Options</div>
+          <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 6, zIndex: 50, background: T.hdr, border: `1px solid ${T.bdrHi}`, borderRadius: 2, minWidth: 160, boxShadow: '0 4px 16px rgba(0,0,0,0.3)' }}>
+            <div style={{ fontSize: 7, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.15em', padding: '8px 12px 4px', borderBottom: `1px solid ${T.bdr}` }}>Options</div>
+            <button
+              onClick={() => { setDarkMode(d => !d); setOpen(false); }}
+              style={{ display: 'block', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '9px 12px', textAlign: 'left', color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', borderBottom: `1px solid ${T.bdr}` }}
+              onMouseEnter={e => { e.currentTarget.style.background = T.cardHov; e.currentTarget.style.color = T.ink; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = T.inkMut; }}
+            >{darkMode ? '☀ Day Mode' : '☾ Night Mode'}</button>
             <button
               onClick={() => { dispatch({ type: 'RESET' }); setOpen(false); }}
-              style={{ display: 'block', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '9px 12px', textAlign: 'left', color: '#aa9068', fontFamily: "'Courier Prime', monospace", fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', borderBottom: '1px solid #2a2110' }}
-              onMouseEnter={e => { e.currentTarget.style.background = '#211c0a'; e.currentTarget.style.color = '#e4d4a8'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = '#aa9068'; }}
+              style={{ display: 'block', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '9px 12px', textAlign: 'left', color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', borderBottom: `1px solid ${T.bdr}` }}
+              onMouseEnter={e => { e.currentTarget.style.background = T.cardHov; e.currentTarget.style.color = T.ink; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = T.inkMut; }}
             >↺ New Game</button>
-            <div style={{ padding: '7px 12px', fontSize: 9, color: '#8a7040', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.5 }}>
-              Manifest · 1810–1860
-            </div>
+            <div style={{ padding: '7px 12px', fontSize: 9, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.5 }}>Manifest · 1810–1860</div>
           </div>
         </>
       )}
@@ -1838,14 +1804,28 @@ function HeaderMenu({ dispatch }) {
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 export default function ManifestGame() {
   const [state, dispatch] = useReducer(reducer, INIT);
-  const [animating, setAnimating]     = useState(false);
+  const [darkMode, setDarkMode] = useState(true);
+  const [showIntro, setShowIntro] = useState(true);
+  const T = mkT(darkMode);
+  const [animating, setAnimating] = useState(false);
   const [animPhase, setAnimPhase]     = useState('idle');
   const [animContent, setAnimContent] = useState(null);
   const advancingRef = useRef(false);
 
   const allActions = [...ACTIONS, ...UNLOCKABLE_ACTIONS.filter(a => state.unlockedActions.includes(a.id))];
   const allPlayable = allActions
-    .filter(a => !state.taken.includes(a.id) && (a.ya ?? 0) <= state.year && (!a.expires || a.expires > state.year));
+    .filter(a => {
+      if (state.taken.includes(a.id)) return false;
+      if ((a.ya ?? 0) > state.year) return false;
+      if (a.expires && a.expires <= state.year) return false;
+      if (a.requiresPassionVisible) {
+        const { star, passion } = a.requiresPassionVisible;
+        const p = state.stars[star]?.passions[passion];
+        if (!p) return false;
+        if (p.hiddenUntil && macropassionValue(state.stars[star].passions) < p.hiddenUntil) return false;
+      }
+      return true;
+    });
   const newThisTurn = new Set(allPlayable.filter(a => !state.seenActions.includes(a.id)).map(a => a.id));
   const playable = [...allPlayable].sort((a, b) => {
     const aNew = newThisTurn.has(a.id) ? 1 : 0;
@@ -1889,14 +1869,15 @@ export default function ManifestGame() {
   const currentVis = SEASON_VISUALS[state.season];
 
   return (
+    <ThemeCtx.Provider value={T}>
     <>
       <style>{FONTS}</style>
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
         ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-track { background: #0e0c07; }
-        ::-webkit-scrollbar-thumb { background: #2a2110; border-radius: 2px; }
-        ::-webkit-scrollbar-thumb:hover { background: #453618; }
+        ::-webkit-scrollbar-track { background: ${T.scrollTrack}; }
+        ::-webkit-scrollbar-thumb { background: ${T.scrollThumb}; border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: ${T.scrollHover}; }
         @keyframes symbolPulse {
           0%   { transform: scale(0.6); opacity: 0; }
           60%  { transform: scale(1.15); opacity: 1; }
@@ -1918,6 +1899,8 @@ export default function ManifestGame() {
         .action-card-new { animation: fadeInAction 0.4s ease-out forwards; }
       `}</style>
 
+      {showIntro && <IntroScreen onBegin={() => setShowIntro(false)} T={T} />}
+
       {state.ruined && <RuinScreen state={state} dispatch={dispatch} />}
       {state.pendingGuest && !state.ruined && (
         <GuestModal guest={state.pendingGuest} dispatch={dispatch} />
@@ -1931,47 +1914,35 @@ export default function ManifestGame() {
         />
       )}
 
-      <div style={{ background: '#0e0c07', height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: "'Courier Prime', monospace" }}>
+      <div style={{ background: T.bg, height: '100vh', width: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Courier Prime', monospace", transition: 'background 0.35s' }}>
 
         {/* HEADER */}
-        <div style={{ background: '#1a1408', borderBottom: '1px solid #2a2110', padding: '8px 18px', display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
+        <div style={{ background: T.hdr, borderBottom: `1px solid ${T.bdr}`, padding: '8px 18px', display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
 
           {/* MENU */}
-          <HeaderMenu dispatch={dispatch} />
+          <HeaderMenu dispatch={dispatch} darkMode={darkMode} setDarkMode={setDarkMode} />
 
           <div>
-            <div style={{ fontSize: 7, color: '#8a7040', letterSpacing: '0.2em', textTransform: 'uppercase' }}>The Territorial Standard · Est. 1810</div>
+            <div style={{ fontSize: 7, color: T.inkDim, letterSpacing: '0.2em', textTransform: 'uppercase' }}>The Territorial Standard · Est. 1810</div>
             <div style={{ fontSize: 22, color: '#c9a14a', fontFamily: "'Playfair Display', serif", fontWeight: 900, letterSpacing: '0.05em', lineHeight: 1 }}>MANIFEST</div>
           </div>
-          <div style={{ width: 1, height: 32, background: '#2a2110' }} />
+          <div style={{ width: 1, height: 32, background: T.bdr }} />
 
           {/* SEASON WIDGET */}
           <div style={{ position: 'relative', width: 130, height: 38, overflow: 'hidden' }}>
-            {/* Static */}
-            <div style={{
-              position: 'absolute', inset: 0,
-              opacity: animating ? 0 : 1,
-              transform: animating ? 'translateY(-6px)' : 'translateY(0)',
-              transition: animating ? 'opacity 0.25s, transform 0.25s' : 'none',
-            }}>
-              <div style={{ fontSize: 19, color: '#e4d4a8', fontFamily: "'Playfair Display', serif", fontWeight: 700, lineHeight: 1 }}>{state.year}</div>
+            <div style={{ position: 'absolute', inset: 0, opacity: animating ? 0 : 1, transform: animating ? 'translateY(-6px)' : 'translateY(0)', transition: animating ? 'opacity 0.25s, transform 0.25s' : 'none' }}>
+              <div style={{ fontSize: 19, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 700, lineHeight: 1 }}>{state.year}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
                 <span style={{ fontSize: 11, color: currentVis.color }}>{currentVis.symbol}</span>
-                <span style={{ fontSize: 8, color: '#aa9068', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{state.season}</span>
+                <span style={{ fontSize: 8, color: T.inkMut, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{state.season}</span>
               </div>
             </div>
-            {/* Incoming */}
             {animating && animContent && (
-              <div style={{
-                position: 'absolute', inset: 0,
-                opacity: animPhase === 'rise' ? 0 : animPhase === 'hold' ? 1 : 0,
-                transform: animPhase === 'rise' ? 'translateY(10px)' : 'translateY(0)',
-                transition: animPhase === 'rise' ? 'opacity 0.35s, transform 0.35s' : animPhase === 'fall' ? 'opacity 0.5s' : 'none',
-              }}>
-                <div style={{ fontSize: 19, color: '#e4d4a8', fontFamily: "'Playfair Display', serif", fontWeight: 700, lineHeight: 1 }}>{animContent.year}</div>
+              <div style={{ position: 'absolute', inset: 0, opacity: animPhase === 'rise' ? 0 : animPhase === 'hold' ? 1 : 0, transform: animPhase === 'rise' ? 'translateY(10px)' : 'translateY(0)', transition: animPhase === 'rise' ? 'opacity 0.35s, transform 0.35s' : animPhase === 'fall' ? 'opacity 0.5s' : 'none' }}>
+                <div style={{ fontSize: 19, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 700, lineHeight: 1 }}>{animContent.year}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
                   <span style={{ fontSize: 11, color: animContent.color, display: 'inline-block', animation: animPhase === 'hold' ? 'symbolPulse 0.45s ease-out forwards' : 'none' }}>{animContent.symbol}</span>
-                  <span style={{ fontSize: 8, color: '#aa9068', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{animContent.season}</span>
+                  <span style={{ fontSize: 8, color: T.inkMut, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{animContent.season}</span>
                 </div>
                 <div style={{ fontSize: 8, color: animContent.color, fontStyle: 'italic', marginTop: 1, fontFamily: "'Playfair Display', serif" }}>{animContent.sub}</div>
               </div>
@@ -1983,7 +1954,7 @@ export default function ManifestGame() {
               onClick={handleAdvance}
               disabled={animating}
               style={{ background: 'transparent', border: '1px solid #c9a14a', color: '#c9a14a', padding: '6px 14px', fontFamily: "'Courier Prime', monospace", fontSize: 10, cursor: animating ? 'default' : 'pointer', letterSpacing: '0.12em', textTransform: 'uppercase', borderRadius: 2, opacity: animating ? 0.4 : 1 }}
-              onMouseEnter={e => { if (!animating) { e.currentTarget.style.background = '#c9a14a'; e.currentTarget.style.color = '#1a1408'; }}}
+              onMouseEnter={e => { if (!animating) { e.currentTarget.style.background = '#c9a14a'; e.currentTarget.style.color = T.hdr; }}}
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#c9a14a'; }}>
               Advance Season →
             </button>
@@ -1994,33 +1965,32 @@ export default function ManifestGame() {
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
           {/* PERSONS */}
-          <div style={{ width: 248, borderRight: '1px solid #2a2110', padding: '14px 10px', overflowY: 'auto', flexShrink: 0 }}>
-            <div style={{ fontSize: 7, color: '#8a7040', textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid #2a2110' }}>Persons of Interest</div>
+          <div style={{ width: 248, borderRight: `1px solid ${T.bdr}`, padding: '14px 10px', overflowY: 'auto', flexShrink: 0, background: T.surf }}>
+            <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 10, paddingBottom: 6, borderBottom: `1px solid ${T.bdr}` }}>Persons of Interest</div>
             {Object.values(state.stars).filter(s => revealed.includes(s.id)).map(s => <StarCard key={s.id} star={s} />)}
             <HomesteadPanel homesteadLog={state.homesteadLog} />
           </div>
 
           {/* DECISIONS */}
-          <div style={{ width: 320, borderRight: '1px solid #2a2110', overflowY: 'auto', flexShrink: 0 }}>
-            <div style={{ padding: '14px 12px 8px', borderBottom: '1px solid #2a2110' }}>
-              <div style={{ fontSize: 7, color: '#8a7040', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Matters Requiring Decision</div>
+          <div style={{ width: 320, borderRight: `1px solid ${T.bdr}`, overflowY: 'auto', flexShrink: 0, background: T.bg }}>
+            <div style={{ padding: '14px 12px 8px', borderBottom: `1px solid ${T.bdr}` }}>
+              <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.2em' }}>Matters Requiring Decision</div>
             </div>
             {state.pendingGuest && (
-              <div style={{ margin: '10px 12px 0', background: '#1a140a', border: '1px solid #6a5020', borderLeft: '3px solid #aa9068', borderRadius: 2, padding: '8px 10px', cursor: 'pointer' }}
-                onClick={() => {}}>
+              <div style={{ margin: '10px 12px 0', background: T.card, border: `1px solid ${T.bdrHi}`, borderLeft: '3px solid #aa9068', borderRadius: 2, padding: '8px 10px', cursor: 'pointer' }}>
                 <div style={{ fontSize: 7, color: '#aa9068', textTransform: 'uppercase', letterSpacing: '0.15em', fontFamily: "'Courier Prime', monospace", marginBottom: 3 }}>⚑ Visitor at the Door</div>
-                <div style={{ fontSize: 10, color: '#c0a878', fontFamily: "'Playfair Display', serif", fontWeight: 700 }}>{state.pendingGuest.name}</div>
-                <div style={{ fontSize: 8, color: '#8a7040', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', marginTop: 2 }}>{state.pendingGuest.role}</div>
+                <div style={{ fontSize: 10, color: T.inkMid, fontFamily: "'Playfair Display', serif", fontWeight: 700 }}>{state.pendingGuest.name}</div>
+                <div style={{ fontSize: 8, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', marginTop: 2 }}>{state.pendingGuest.role}</div>
               </div>
             )}
             <div style={{ padding: '12px 12px 14px' }}>
               {playable.length === 0 ? (
-                <div style={{ border: '1px solid #2a2110', borderRadius: 2, padding: '14px', background: '#141008' }}>
-                  <div style={{ height: 1, background: '#2a2110', marginBottom: 10 }} />
-                  <div style={{ fontSize: 8, color: '#8a7040', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 6 }}>{state.season}, {state.year}</div>
-                  <div style={{ fontSize: 12, color: '#aa9068', fontFamily: "'Playfair Display', serif", fontStyle: 'italic', lineHeight: 1.55, marginBottom: 8 }}>Nothing requires your hand this season.</div>
-                  <div style={{ fontSize: 10, color: '#8a7040', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.65 }}>Advance the season. What you have set in motion continues whether you attend to it or not.</div>
-                  <div style={{ height: 1, background: '#2a2110', marginTop: 10 }} />
+                <div style={{ border: `1px solid ${T.bdr}`, borderRadius: 2, padding: '14px', background: T.surf }}>
+                  <div style={{ height: 1, background: T.bdr, marginBottom: 10 }} />
+                  <div style={{ fontSize: 8, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 6 }}>{state.season}, {state.year}</div>
+                  <div style={{ fontSize: 12, color: T.inkMut, fontFamily: "'Playfair Display', serif", fontStyle: 'italic', lineHeight: 1.55, marginBottom: 8 }}>Nothing requires your hand this season.</div>
+                  <div style={{ fontSize: 10, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.65 }}>Advance the season. What you have set in motion continues whether you attend to it or not.</div>
+                  <div style={{ height: 1, background: T.bdr, marginTop: 10 }} />
                 </div>
               ) : playable.map(act => (
                 <ActionCard key={act.id} act={act} stars={state.stars} dispatch={dispatch} revealed={revealed} isNew={newThisTurn.has(act.id)} year={state.year} season={state.season} />
@@ -2029,10 +1999,10 @@ export default function ManifestGame() {
           </div>
 
           {/* CHRONICLE */}
-          <div style={{ flex: 1, padding: '14px 20px', overflowY: 'auto' }}>
-            <div style={{ fontSize: 7, color: '#8a7040', textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid #2a2110' }}>The Territorial Standard — Chronicle</div>
+          <div style={{ flex: 1, padding: '14px 20px', overflowY: 'auto', background: T.bg }}>
+            <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 10, paddingBottom: 6, borderBottom: `1px solid ${T.bdr}` }}>The Territorial Standard — Chronicle</div>
             {state.log.length === 0 ? (
-              <div style={{ fontSize: 13, color: '#aa9068', fontFamily: "'Playfair Display', serif", fontStyle: 'italic', lineHeight: 1.9 }}>
+              <div style={{ fontSize: 13, color: T.inkMut, fontFamily: "'Playfair Display', serif", fontStyle: 'italic', lineHeight: 1.9 }}>
                 The ledger is empty.<br/><br/>You have land, some money, and a series of obligations not yet named.
               </div>
             ) : state.log.map(entry => <LogEntry key={entry.id} entry={entry} stars={state.stars} revealed={revealed} isNew={entry.year === state.year && entry.season === state.season} />)}
@@ -2041,5 +2011,6 @@ export default function ManifestGame() {
         </div>
       </div>
     </>
+    </ThemeCtx.Provider>
   );
 }
