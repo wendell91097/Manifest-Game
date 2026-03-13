@@ -32,7 +32,19 @@ This is a prototype. It proves the threshold system works. The full scope — fi
 | Hostile | -75 to -50 |
 | Irreconcilable | -100 to -75 |
 
-Each band is a behavioral state, not a number. Crossing a threshold changes what that person does in the world — concretely, legibly, with downstream consequences. The overall relationship with each Star is a **Macropassion** label, derived from the average across all their Passions: from *Known Acquaintance* at neutral to *Bound Ally* or *Sworn Enemy* at the extremes.
+Each band is a behavioral state, not a number. Crossing a threshold changes what that person does in the world — concretely, legibly, with downstream consequences. The overall relationship with each Star is a **Macropassion** label, derived from the average across all their Passions. Nine named states cover the full range:
+
+| Macropassion | Average |
+|---|---|
+| Bound Ally | 75 to 100 |
+| Steadfast Friend | 50 to 75 |
+| Trusted Ally | 30 to 50 |
+| Cautious Friend | 15 to 30 |
+| Known Acquaintance | -15 to 15 |
+| Wary Stranger | -30 to -15 |
+| Open Opponent | -50 to -30 |
+| Active Adversary | -75 to -50 |
+| Sworn Enemy | -100 to -75 |
 
 **Reputation** tracks Fame and Infamy independently for each Star. These measure political relevance — how much you currently register in each Star's world — not a permanent ledger. They combine into four named reputation states per Star (e.g. *Known Paradox*, *Honored Neighbor*, *Dangerous Debtor*, *Quiet Stranger* for Esperanza). Both values decay each season without active maintenance and compound on the way up via a logarithmic curve — described further under Systems.
 
@@ -47,6 +59,9 @@ Each band is a behavioral state, not a number. Crossing a threshold changes what
 ### Actions
 Each decision is tied to a source Star and an availability window. Effects move Passion values and Fame/Infamy scores across multiple Stars simultaneously. Serving one person usually costs another. Some actions expire if left unanswered.
 
+### Repair and Betrayal
+Some actions only surface after prior damage or prior trust has been established. Repair actions are gated behind Passion thresholds — they exist to give players a costly path back from a bad position, not a cheap undo. Betrayal actions work the opposite way: they only appear once a Passion is high enough that there's something real to exploit. Using someone's trust as an instrument against them is an available move, with consequences that reflect what it actually means.
+
 ### Fame & Infamy
 Fame and Infamy don't accumulate permanently — they measure how much you currently matter to each Star's world. Both values are whole numbers between 0 and 100.
 
@@ -54,20 +69,31 @@ Fame and Infamy don't accumulate permanently — they measure how much you curre
 
 **Compounding.** Gains scale logarithmically with your current level, following the same equal-ratio property as the Richter scale: each equal interval of value multiplies incoming gains by the same factor. At low values the modifier is nearly imperceptible — 20 Fame adds roughly 6% to further Fame gains. At high values the acceleration becomes significant — 80 Infamy adds roughly 59% to further Infamy gains, and 100 adds 100%. Early accumulation is relatively cheap; the upper range becomes self-reinforcing fast. Losses are never amplified; only gains compound.
 
+### Passion Neglect
+Relationships not actively tended lose ground slowly. Each season, the game scans the last eight log entries for each Star. If none of those entries involved that Star's effects, their positive Passions drift down by 1 point. Only positive Passions decay this way — negative ones require active repair to shift. The floor is 0. Neglect can fully erode what you built, but gradually.
+
 ### Deferred Consequences
 Most actions plant a deferred outcome that fires years later in the Chronicle — a Sacramento court ruling, a railroad decision, a territorial record becoming permanent. The deferred entry arrives regardless of what you do afterward. What you decided in 1812 is still in the newspaper in 1819.
 
 ### Reactive Events
-When a Passion crosses a threshold, a reactive event fires automatically. These appear in the Chronicle as news items, apply secondary effects, and can unlock new actions. Esperanza's trust crossing -50 files a formal complaint against you. Solomon's Autonomy crossing -50 closes the post to your accounts. Whitmore's standing crossing 75 gets him promoted to District Supervisor with expanded authority.
+When a Passion crosses a threshold, a reactive event fires automatically. These appear in the Chronicle as news items, apply secondary effects, and can unlock new actions. Crossing thresholds in either direction can trigger events — positive ones open doors, negative ones close them. Esperanza's trust crossing -50 files a formal complaint against you; crossing +50 grants access to the coalition's private archive and unlocks new strategic options. Solomon's Autonomy crossing -50 restricts your access to the post; his Brotherhood Passion crossing +50 opens contact with his brother's Nevada network. Whitmore's standing crossing +75 gets him promoted to District Supervisor with expanded authority; his Corridor Claim falling below -50 draws a company auditor north.
 
 ### Convergence Events
-When conditions across multiple Stars are simultaneously met, a forced choice appears as a modal. These present direct confrontations between Star interests that cannot be avoided or deferred. The Northern Boundary confrontation fires when both Esperanza's Land Security and Whitmore's Route Completion are above 30 — they call on you in the same week regarding the same strip of land. You must choose.
+When conditions across multiple Stars are simultaneously met, a forced choice appears as a modal. These present direct confrontations between Star interests that cannot be avoided or deferred. Three convergence events are in the prototype:
+
+The **Northern Boundary** confrontation fires when both Esperanza's Land Security and Whitmore's Corridor Claim are above 30 — they call on you in the same week regarding the same strip of land. You must choose.
+
+The **Unlikely Meeting** fires when Solomon's Independence (in either direction, ≥30 in absolute value) and Esperanza's Coalition Strength are both above 30 — each has come to see something the other has, and you are the only person both of them trust. Whether to broker that alliance is yours to decide.
+
+The **Surveyor's Letter** fires when both of Whitmore's visible Passions are above 30 — he asks you, off the record, to help him write to his wife in Cincinnati. He also needs your name on a corridor extension before the month ends. He doesn't connect the two requests out loud. He doesn't have to.
 
 ### Transient Guests
-One-off visitors arrive for a window of seasons. The player must respond before advancing the season or they depart unanswered. Unanswered guests are recorded in the Crossroads ledger. Guest choices affect Fame and Infamy and add Chronicle entries with or without the player's name attached, depending on the choice made.
+One-off visitors arrive for a window of seasons. The player must respond before advancing the season or they depart unanswered. Unanswered guests are recorded in the Homestead ledger. Guest choices affect Fame and Infamy and add Chronicle entries with or without the player's name attached, depending on the choice made.
 
 ### Hidden Passions
-Some Passions are not visible at the start. Solomon's Brotherhood Passion — his search for his brother Caleb, missing since the Nevada silver rush — is hidden until the Macropassion average for Solomon reaches 30. It cannot be acted on until it is visible.
+Some Passions are not visible at the start. Both Solomon and Whitmore each carry one hidden Passion that reveals only once the Macropassion average reaches 15 — the *Cautious Friend* threshold. Once revealed, a hidden Passion stays visible permanently; a subsequent dip in the average can't hide knowledge already earned.
+
+Solomon's **Brotherhood** Passion tracks his search for his brother Caleb, missing since the Nevada silver rush. Whitmore's **The Distance** Passion tracks his relationship with his wife Margaret in Cincinnati — the months that have become years, and what that silence is costing both of them. Neither can be acted on until it surfaces.
 
 ### World Dispatches
 Historical events arrive in the Chronicle regardless of player action, dated and dateline-attributed to period newspapers. The War of 1812, the Missouri Compromise, Jackson's election, the founding of the Anti-Slavery Society, Texas independence, the Mexican-American War, the Gold Rush. These are texture, not mechanics — but they frame what your decisions mean in their moment.
@@ -82,11 +108,11 @@ She represents 47 people whose livelihoods depend on the Vallejo grant. At Devot
 
 **Solomon Reed — Freedman & Trader**
 Passions: Permanence, Independence, Brotherhood (hidden).
-He built something in this valley with no safety net and no federal protection. At Devoted on Permanence he lists you as a trusted partner in territorial filings. At Devoted on Independence he shares routes and contacts he shares with very few. At Irreconcilable he relocates the post's most valuable operations beyond your reach.
+He built something in this valley with no safety net and no federal protection, with 31 people who orbit his post and have no other reliable anchor in the valley. At Devoted on Permanence he lists you as a trusted partner in territorial filings. At Devoted on Independence he shares routes and contacts he shares with very few. At Irreconcilable he relocates the post's most valuable operations beyond your reach.
 
 **J.T. Whitmore — Railroad Surveyor**
-Passions: Route Completion, Company Standing, Claim Dominance.
-Pacific Railroad's man in the valley, with 89 people's livelihoods running through the company. At Devoted on Company Standing he names you in his reports as instrumental — the company knows you. At Devoted on Claim Dominance he treats your land as an extension of the railroad's protected zone. At Irreconcilable he brings the full weight of Pacific Railroad's legal office against you.
+Passions: Corridor Claim, Company Standing, The Distance (hidden).
+Pacific Railroad's man in the valley, with 89 people's livelihoods running through the company. At Devoted on Company Standing he names you in his reports as instrumental — the company knows you. At Devoted on Corridor Claim he treats your land as an extension of the railroad's protected zone. The Distance is his relationship with his wife Margaret in Cincinnati, invisible until the relationship is deep enough to reveal it. At Irreconcilable he brings the full weight of Pacific Railroad's legal office against you.
 
 ---
 
@@ -118,7 +144,7 @@ The framework maps onto Manifest like this:
 - **Macropassion as aggregation** — a named relationship state derived from the average of all Passions, with behavioral thresholds rather than raw numbers
 - **Zero-sum tension** — Levine's Frank-and-Pete problem: two Stars who can't both be fully served, where the northern boundary dispute forces a direct confrontation between Esperanza's land claim and Whitmore's federal filing
 - **Transparency** — every effect surfaces a plain-language `why`, keeping triggers legible rather than opaque
-- **Hidden Passions** — Solomon's Brotherhood Passion (his search for his missing brother) is invisible until the relationship is deep enough to reveal it, exactly as Levine describes
+- **Hidden Passions** — Solomon's Brotherhood Passion (his search for his missing brother) and Whitmore's The Distance (his marriage strained by years in the field) are both invisible until the relationship is deep enough to reveal them, exactly as Levine describes
 
 Deferred consequences — decisions planting Chronicle entries that fire years later — extend beyond the talk. Levine didn't address time-delayed outcomes; that's the original design contribution this prototype adds to the framework.
 

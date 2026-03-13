@@ -28,18 +28,6 @@ function mkT(dm) {
   };
 }
 
-// ─── PALETTE ─────────────────────────────────────────────────────────────────
-const P = {
-  bg: '#0e0c07', surface: '#141008', card: '#1a1508',
-  border: '#2a2110', borderHi: '#453618',
-  gold: '#c9a14a', cream: '#e4d4a8', creamDim: '#c0a878',
-  muted: '#aa9068', dim: '#8a7040', ink: '#1a1408',
-  esperanza: '#c87830', solomon: '#5a8e52', whitmore: '#3e6e9a',
-  defer: '#8a1818', deferDim: '#501010',
-  pos: '#4a8e42', neg: '#9a3020',
-  posBar: '#3a7e32', negBar: '#8a2818',
-};
-
 // ─── FAME / INFAMY SYSTEM ─────────────────────────────────────────────────────
 // Fame and Infamy measure political/power relevance — not a permanent ledger,
 // but how much you currently register in each Star's world.
@@ -229,20 +217,20 @@ const INITIAL_STARS = {
     color: '#3e6e9a',
     community: 'The survey crews, company agents, and federal contacts working the northern corridor — 89 people whose livelihoods run through Pacific Railroad.',
     passions: {
-      route: {
-        label: 'Route Completion',
-        desc: 'The completion of the northern survey corridor, unobstructed, to Shasta.',
+      corridor: {
+        label: 'Corridor Claim',
+        desc: 'The completion and legal dominance of the northern survey route — unobstructed from the valley to Shasta.',
         value: 0,
         behaviors: {
-          75:  'He brings you into the railroad\'s confidence as a valley intermediary.',
-          50:  'He shares advance notice of survey movements and federal filings.',
-          30:  'He smooths your dealings with the railroad\'s legal office.',
-          15:  'He mentions you favorably in company correspondence.',
-          0:   'He is professional. He does not know what you are yet.',
-          '-15': 'He notes your name in filings where it works against the route.',
-          '-30': 'He routes survey crews to avoid your land but not Esperanza\'s.',
-          '-50': 'He challenges your legal standing in corridor-adjacent transactions.',
-          '-75': 'He dedicates resources specifically to neutralizing your interference.',
+          75:  'He treats your land as an extension of the railroad\'s protected zone. The company\'s legal resources are effectively yours.',
+          50:  'He shares advance notice of survey movements and federal filings, and tips you to competing claims he plans to suppress.',
+          30:  'He smooths your dealings with federal offices. Your paperwork moves without a fight.',
+          15:  'He treats your land transactions as legitimate and notes your name favorably in corridor filings.',
+          0:   'Your land is neither inside nor outside his calculation. Yet.',
+          '-15': 'He flags your transactions for legal review and notes your name in obstructive filings.',
+          '-30': 'He files competing surveys against your boundary claims and routes crews to maximize pressure.',
+          '-50': 'He funds active legal challenges to your property and challenges your standing in federal court.',
+          '-75': 'He treats your land as an enemy holding and brings the full weight of Pacific Railroad\'s legal office against it.',
         },
       },
       standing: {
@@ -261,20 +249,21 @@ const INITIAL_STARS = {
           '-75': 'He brings the full weight of Pacific Railroad\'s legal office against you.',
         },
       },
-      control: {
-        label: 'Claim Dominance',
-        desc: 'The suppression of competing land claims that threaten the railroad\'s corridor.',
+      margaret: {
+        label: 'The Distance',
+        desc: 'His wife Margaret in Cincinnati — the months that became years, and what that silence is costing both of them.',
+        hiddenUntil: 15,
         value: 0,
         behaviors: {
-          75:  'He views your land as an extension of the railroad\'s protected zone.',
-          50:  'He ensures the railroad\'s surveyors never cross your property.',
-          30:  'He tips you to competing claims he plans to suppress.',
-          15:  'He treats your paperwork as legitimate without requiring a fight.',
-          0:   'Your claims are neither endorsed nor contested. Yet.',
-          '-15': 'He flags your land transactions for legal review.',
-          '-30': 'He files competing surveys against your boundary claims.',
-          '-50': 'He funds legal challenges to your property in federal court.',
-          '-75': 'He treats your land as an enemy holding to be neutralized.',
+          75:  'He shows you her letters. He talks about going home. For the first time he sounds like a man with something to lose beyond the route.',
+          50:  'He mentions her by name. Not often. When he does, it means he trusts you with something he doesn\'t share with the company.',
+          30:  'He has started leaving Sundays clear. It is a small sign. You notice it.',
+          15:  'He is more measured than his orders require. Someone is moderating him.',
+          0:   'He gives nothing away. The work is the work.',
+          '-15': 'He has stopped writing letters east. The survey crew has noticed the change in him.',
+          '-30': 'He takes risks with the survey timeline the company hasn\'t sanctioned. He is trying to finish and go home and it is making him sloppy.',
+          '-50': 'He is making commitments he cannot keep. The company will notice before she does.',
+          '-75': 'He has stopped mentioning going home. Something has broken in him that the corridor will not fix.',
         },
       },
     },
@@ -283,18 +272,27 @@ const INITIAL_STARS = {
 };
 
 // ─── REPUTATION GRID ─────────────────────────────────────────────────────────
+// Each entry: { label, behavior }
+// label    — what you are called in rooms you're not in
+// behavior — what that Star actually does differently at this reputation state
 const REP_LABELS = {
   esperanza: {
-    HH: 'Known Paradox',     HL: 'Honored Neighbor',
-    LH: 'Dangerous Debtor',  LL: 'Quiet Stranger',
+    HH: { label: 'Known Paradox',    behavior: "She has publicly backed you and publicly opposed you. Coalition members ask her about you directly; her answers are careful and noncommittal. She won't move against you, but she won't take a room for you either." },
+    HL: { label: 'Honored Neighbor', behavior: "She names you in coalition meetings as someone who has acted correctly. Families extend small courtesies unprompted. The valley's doors open a little wider when your name is attached." },
+    LH: { label: 'Dangerous Debtor', behavior: "She hasn't pressed the attack herself, but coalition members treat your presence as a liability. Introductions dry up. Credit that existed last season doesn't this one." },
+    LL: { label: 'Quiet Stranger',   behavior: "She neither advances nor obstructs you. You have not yet made enough of an impression, in either direction, to register in her accounting." },
   },
   solomon: {
-    HH: 'Double-Sided Coin', HL: 'Good Credit',
-    LH: 'Shadowed Account',  LL: 'Passing Through',
+    HH: { label: 'Double-Sided Coin', behavior: "He trades with you but rarely in front of witnesses. Useful, watchful, noncommittal. You are neither inside the circle nor outside it — something more ambiguous than either." },
+    HL: { label: 'Good Credit',       behavior: "He routes valuable information your way first and extends terms without being asked. His people treat your name as a reference. The post works with you." },
+    LH: { label: 'Shadowed Account',  behavior: "He serves you across the counter but won't be seen standing beside you. Others at the post notice. His name won't appear next to yours in any record that matters." },
+    LL: { label: 'Passing Through',   behavior: "Cordial. Transactional. He extends no unusual courtesy and registers no particular caution. You have not yet mattered enough to be trusted or feared." },
   },
   whitmore: {
-    HH: 'Useful Enemy',      HL: 'Company Man',
-    LH: 'Liable Obstruction',LL: 'Irrelevant',
+    HH: { label: 'Useful Enemy',       behavior: "He works against your interests in court while privately respecting your competence. The company knows your name as a complication worth accounting for — which is its own kind of standing." },
+    HL: { label: 'Company Man',        behavior: "His legal office treats your filings as friendly. Federal contacts in Sacramento smooth your paperwork without requiring explanation. You are on the right side of the company's ledger." },
+    LH: { label: 'Liable Obstruction', behavior: "Survey crews have been briefed on your parcels. Every filing you make draws a counter within the week. The railroad's legal resources are pointed at your land specifically." },
+    LL: { label: 'Irrelevant',         behavior: "He neither routes resources toward you nor against you. You have not made enough of an impression on the company's interests to register as either asset or threat." },
   },
 };
 
@@ -314,8 +312,10 @@ const ACTIONS = [
     effects: [
       { star: 'esperanza', passion: 'land',     delta: +18, why: "A formal survey is the first legal protection the grant has had. It makes dispossession harder." },
       { star: 'esperanza', passion: 'trust',    delta: +12, why: "You acted in her interest without being asked and without asking for anything." },
-      { star: 'whitmore',  passion: 'route',    delta: -10, why: "The documented boundary complicates the northern corridor survey." },
-      { star: 'whitmore',  passion: 'control',  delta: -8,  why: "You've legitimized a claim that competes with the railroad's interests." },
+      { star: 'whitmore',  passion: 'corridor', delta: -14, why: "The documented boundary complicates the corridor survey and legitimizes a competing land claim." },
+    ],
+    repBonus: [
+      { star: 'esperanza', repState: 'HL', extraEffects: [{ star: 'esperanza', passion: 'coalition', delta: +8, why: "Your standing with the families gives the survey more legitimacy than the document alone would carry." }] },
     ],
     fame:   { esperanza: +10, solomon: +5,  whitmore: -5  },
     infamy: { esperanza:   0, solomon:  0,  whitmore: +5  },
@@ -325,7 +325,51 @@ const ACTIONS = [
       body: "Seven years after the original filing, Sacramento's land court ruled in favor of the Vallejo survey record. The railroad's competing plat was struck for irregularities. What had seemed a paper gesture in 1810 held the land in 1817.",
       effects: [
         { star: 'esperanza', passion: 'land',  delta: +15, why: "The court decision is now part of the permanent record." },
-        { star: 'whitmore',  passion: 'route', delta: -18, why: "The corridor is legally obstructed by the upheld boundary." },
+        { star: 'whitmore',  passion: 'corridor', delta: -18, why: "The corridor is legally obstructed by the upheld boundary." },
+      ],
+    },
+  },
+  {
+    id: 'hold_letter', ya: 1810, yaSeasonIdx: 1, source: 'solomon', expires: 1810, expiresSeason: 'Winter', msgType: 'Request',
+    dispatch: "Hold Solomon's Letter at the Post Under Your Name",
+    desc: "Solomon has asked you to hold a piece of correspondence at the post under your name — not his. He does not explain why his own name cannot be on it. The ask is a small thing and an unusual one. You either accept or you don't.",
+    result: "CORRESPONDENCE HELD — Letter received and kept under valley landholder's name.",
+    resultBody: "A piece of correspondence arrived at the post this season and was held under a local landholder's name at the request of Solomon Reed. No further details were entered into the post's record. Reed did not explain the arrangement and was not asked to.",
+    effects: [
+      { star: 'solomon', passion: 'autonomy', delta: +8, why: "You accepted a quiet ask without pressing for an explanation. That is the kind of trust he does not take for granted." },
+      { star: 'solomon', passion: 'caleb',    delta: +8, why: "The letter was for his brother. He does not know yet whether it will reach him. You made it possible." },
+    ],
+    fame:   { esperanza: 0, solomon: +3, whitmore: 0 },
+    infamy: { esperanza: 0, solomon:  0, whitmore: 0 },
+    def: null,
+    inaction: {
+      headline: "REQUEST DECLINED — Reed's arrangement fell through. Letter unplaced.",
+      body: "Solomon Reed made a quiet request this season regarding a piece of correspondence. The arrangement was not made. He has not raised the matter again.",
+      effects: [
+        { star: 'solomon', passion: 'autonomy', delta: -5, why: "He asked a small thing without explanation and was turned away. He will not ask again." },
+      ],
+    },
+  },
+  {
+    id: 'introduce_whitmore', ya: 1811, source: 'whitmore', expires: 1811, expiresSeason: 'Summer', msgType: 'Request',
+    dispatch: "Introduce Whitmore to the Valley",
+    desc: "Whitmore is known here as a railroad agent — a surveyor, a federal interest, an instrument of the company. You could change that. Land office contacts, the Merchant's Association, a dinner at the right house. He becomes a person in the valley rather than just a presence. The valley will remember who vouched for him.",
+    result: "RAILROAD SURVEYOR INTRODUCED TO VALLEY SOCIETY — Local landholder brokers entry into merchant and land circles.",
+    resultBody: "J.T. Whitmore of Pacific Railroad has been introduced to the valley's business community through the efforts of a local landholder. He attended a Merchant's Association dinner this month and was received without incident. Esperanza Vallejo was not present.",
+    effects: [
+      { star: 'whitmore',  passion: 'standing', delta: +10, why: "A man with standing in the valley is harder to recall and easier to work with. He knows what this cost you." },
+      { star: 'whitmore',  passion: 'margaret', delta:  +8, why: "A life with weight here gives him something to describe in letters home. The work is not only exile. He has written more this month than in the previous three." },
+      { star: 'esperanza', passion: 'trust',    delta: -10, why: "You socially sponsored the man whose surveys threaten her land. She does not separate the person from the instrument." },
+      { star: 'solomon',   passion: 'autonomy', delta:  -6, why: "The railroad's man is now comfortable in the valley. Comfort has a way of becoming permanence." },
+    ],
+    fame:   { esperanza: -6, solomon: -4, whitmore: +10 },
+    infamy: { esperanza: +8, solomon:  0, whitmore:   0 },
+    def: null,
+    inaction: {
+      headline: "WHITMORE REMAINS OUTSIDE VALLEY CIRCLES — No introductions made. Railroad agent stays unknown.",
+      body: "J.T. Whitmore has not been introduced to the valley's merchant and land community. He attends the Merchant's Association without a local sponsor and is received as what he is: a railroad man on company business.",
+      effects: [
+        { star: 'whitmore',  passion: 'standing', delta: -5, why: "Without a local sponsor he remains an outsider in the rooms that matter." },
       ],
     },
   },
@@ -338,11 +382,12 @@ const ACTIONS = [
     resultBody: "A joint claim establishing the northern survey corridor was submitted to the federal land office, co-signed by a valley landholder and J.T. Whitmore of Pacific Railroad. The filing extinguishes prior competing claims within the corridor. Solomon Reed declined to comment.",
     bodyHidden:  "A joint claim establishing the northern survey corridor was submitted to the federal land office, co-signed by a valley landholder and J.T. Whitmore of Pacific Railroad. The filing extinguishes prior competing claims within the corridor. At least one valley trader was reached for comment. He declined.",
     effects: [
-      { star: 'whitmore',  passion: 'route',    delta: +20, why: "The federal co-signature clears the corridor's legal standing." },
+      { star: 'whitmore',  passion: 'corridor', delta: +20, why: "The federal co-signature clears the corridor's legal standing." },
       { star: 'whitmore',  passion: 'standing', delta: +10, why: "Securing local signatures is exactly what the company sent him here to do." },
       { star: 'solomon',   passion: 'autonomy', delta: -20, why: "Federal paper is now in the valley record, and you helped put it there. He knows." },
       { star: 'esperanza', passion: 'trust',    delta: -15, why: "You sided with the federal apparatus against valley interests. She noticed." },
       { star: 'esperanza', passion: 'land',     delta: -10, why: "The corridor filing encroaches on the grant's northern boundary." },
+      { star: 'whitmore',  passion: 'margaret', delta:  -5, why: "Helping the railroad is helping the machine. He is grateful but it deepens the trench." },
     ],
     fame:   { esperanza: -5, solomon:  0, whitmore: +12 },
     infamy: { esperanza:  0, solomon: +8, whitmore:   0 },
@@ -386,22 +431,27 @@ const ACTIONS = [
       body: "Six years after the expansion, Solomon Reed's post has become the valley's commercial anchor. Whitmore's planned company depot at the same junction was never built. The private loan has paid back in ways that cannot be counted in coin.",
       effects: [
         { star: 'solomon',  passion: 'roots',   delta: +18, why: "The post is now too established to displace quietly." },
-        { star: 'whitmore', passion: 'route',   delta:  -8, why: "The commercial corridor bypasses the railroad's preferred path." },
+        { star: 'whitmore', passion: 'corridor', delta: -8, why: "The commercial corridor bypasses the railroad's preferred path." },
       ],
     },
   },
   {
     id: 'testify_whitmore', ya: 1813, source: 'whitmore', expires: 1814, msgType: 'Demand',
+    moral: '"In the mouth of two or three witnesses shall every word be established." — 2 Corinthians 13:1',
     dispatch: "Give Sworn Testimony for Whitmore in Land Court",
     desc: "Whitmore's land case hinges on a credible local witness. He needs someone who can say under oath that they saw the survey markers, that the route was established. Render unto Caesar what is Caesar's — but a false oath is a different matter than a true one. Your word carries weight precisely because it is not yet spent.",
     result: "SETTLER TESTIFIES FOR RAILROAD IN DISPUTED SURVEY CASE — Sworn statement validates Pacific Railroad corridor claim.",
     resultBody: "A local landholder provided sworn testimony this week in the Sacramento land tribunal, affirming the validity of Pacific Railroad's northern survey. Esperanza Vallejo, present in the gallery, departed before the reading was concluded. The case continues.",
     effects: [
-      { star: 'whitmore',  passion: 'route',    delta: +18, why: "Your testimony is the credible local corroboration the case needed." },
+      { star: 'whitmore',  passion: 'corridor', delta: +18, why: "Your testimony is the credible local corroboration the case needed." },
       { star: 'whitmore',  passion: 'standing', delta: +15, why: "He delivered a witness. The company pays attention to that." },
       { star: 'esperanza', passion: 'trust',    delta: -25, why: "She was in the room when you testified. There is no interpretation that spares you." },
       { star: 'esperanza', passion: 'land',     delta: -18, why: "Your testimony directly supports the claim that threatens the grant." },
       { star: 'solomon',   passion: 'autonomy', delta: -10, why: "You participated in the federal legal system against valley interests. He did not miss it." },
+      { star: 'whitmore',  passion: 'margaret', delta: +10, why: "You came when he needed someone to stand with him. That is not nothing, whatever your reasons." },
+    ],
+    repBonus: [
+      { star: 'whitmore', repState: 'HL', extraEffects: [{ star: 'whitmore', passion: 'standing', delta: +8, why: "Your existing reputation with the company amplifies the value of your word. He can point to a track record." }] },
     ],
     fame:   { esperanza: -12, solomon: -6, whitmore: +16 },
     infamy: { esperanza: +14, solomon:  0, whitmore:   0 },
@@ -419,7 +469,7 @@ const ACTIONS = [
       body: "Pacific Railroad's land tribunal case has been significantly weakened after an expected local witness did not appear to give testimony. J.T. Whitmore requested a continuance. The disputed parcels remain in question. The case continues without the corroboration he had anticipated.",
       effects: [
         { star: 'whitmore',  passion: 'standing', delta: -12, why: "The case faltered without the local witness he promised the company he could deliver." },
-        { star: 'whitmore',  passion: 'route',    delta: -8,  why: "The corridor claim is legally weakened without sworn corroboration." },
+        { star: 'whitmore',  passion: 'corridor', delta: -8,  why: "The corridor claim is legally weakened without sworn corroboration." },
         { star: 'esperanza', passion: 'land',     delta: +10, why: "The disputed parcels were not awarded. The threat recedes, for now." },
         { star: 'esperanza', passion: 'trust',    delta: +8,  why: "You were asked to testify against her interests. You did not come." },
       ],
@@ -451,16 +501,18 @@ const ACTIONS = [
   },
   {
     id: 'water_rights', ya: 1815, source: 'whitmore', msgType: 'Offer',
+    moral: '"The earth is the LORD\'s, and the fulness thereof; the world, and they that dwell therein." — Psalm 24:1',
     dispatch: "Sell the Creek Easements to Pacific Railroad",
     desc: "Whitmore's company has made a substantial offer for the water rights over the creek corridor. The money is real. The valley farms that depend on that water for irrigation are also real. You can have the money or the valley can have the water. You cannot arrange both.",
     result: "CREEK CORRIDOR WATER RIGHTS SOLD TO PACIFIC RAILROAD — Valley easements transferred in private transaction.",
     resultBody: "Pacific Railroad has acquired the water rights to the upper creek corridor in a transaction concluded this month. Esperanza Vallejo called the sale 'a theft wearing a deed.' Farmers downstream have begun inquiring about alternative water sources.",
     effects: [
-      { star: 'whitmore',  passion: 'route',    delta: +25, why: "The creek corridor is now cleared for grading. The route is materially closer to complete." },
+      { star: 'whitmore',  passion: 'corridor', delta: +25, why: "The creek corridor is now cleared for grading. The route is materially closer to complete." },
       { star: 'whitmore',  passion: 'standing', delta: +12, why: "Acquiring the water rights was his assignment. He delivered." },
       { star: 'esperanza', passion: 'land',     delta: -22, why: "Valley water rights are inseparable from land security. You sold them." },
       { star: 'esperanza', passion: 'trust',    delta: -18, why: "You chose the railroad's money over the valley's water. In her accounting, that is definitive." },
       { star: 'solomon',   passion: 'roots',    delta: -15, why: "A valley without reliable water is a valley that cannot sustain what he has built." },
+      { star: 'whitmore',  passion: 'margaret', delta:  -8, why: "You helped him deliver the assignment. Neither of you spoke of what delivering it costs him." },
     ],
     fame:   { esperanza: -14, solomon: -8, whitmore: +18 },
     infamy: { esperanza: +16, solomon: +8, whitmore:   0 },
@@ -486,7 +538,7 @@ const ACTIONS = [
       { star: 'esperanza', passion: 'trust',     delta: +10, why: "You created conditions for her community to organize. That counts." },
       { star: 'solomon',   passion: 'roots',     delta:  +8, why: "The post has become a place of consequence. He understands the value of that." },
       { star: 'solomon',   passion: 'autonomy',  delta: -15, why: "The political exposure you created will follow him. Whitmore filed an inquiry the same week." },
-      { star: 'whitmore',  passion: 'control',   delta: -18, why: "A coordinated coalition is precisely what he was sent here to prevent." },
+      { star: 'whitmore',  passion: 'corridor',  delta: -18, why: "A coordinated coalition is precisely what he was sent here to prevent." },
     ],
     fame:   { esperanza: +12, solomon: +8, whitmore: -10 },
     infamy: { esperanza:   0, solomon:  0, whitmore: +10 },
@@ -496,7 +548,7 @@ const ACTIONS = [
       body: "Five years after the valley meeting, the coalition has filed a coordinated legal challenge against Pacific Railroad's survey methodology. Eight families are named as plaintiffs. The meeting you hosted in 1817 is now a lawsuit.",
       effects: [
         { star: 'esperanza', passion: 'land',      delta: +20, why: "The lawsuit has suspended railroad action on the disputed parcels." },
-        { star: 'whitmore',  passion: 'route',     delta: -22, why: "The litigation has halted the northern corridor for at least a season." },
+        { star: 'whitmore',  passion: 'corridor',  delta: -22, why: "The litigation has halted the northern corridor for at least a season." },
         { star: 'solomon',   passion: 'autonomy',  delta: -12, why: "The inquiry Whitmore filed in 1817 is now a deposition request." },
       ],
     },
@@ -510,7 +562,7 @@ const ACTIONS = [
     effects: [
       { star: 'esperanza', passion: 'land',     delta: +14, why: "The complaint creates a legal record of unauthorized survey entry." },
       { star: 'esperanza', passion: 'trust',    delta: +15, why: "You filed against the railroad on her land's behalf, at cost to yourself." },
-      { star: 'whitmore',  passion: 'route',    delta: -14, why: "The complaint delays survey work on the parcel." },
+      { star: 'whitmore',  passion: 'corridor', delta: -14, why: "The complaint delays survey work on the parcel." },
       { star: 'whitmore',  passion: 'standing', delta: -10, why: "His crew was named in a public filing. The company noticed." },
     ],
     fame:   { esperanza: +14, solomon: +6, whitmore: -12 },
@@ -522,7 +574,7 @@ const ACTIONS = [
       effects: [
         { star: 'esperanza', passion: 'trust',    delta: -12, why: "She came to you with a specific ask. You said nothing." },
         { star: 'esperanza', passion: 'land',     delta: -8,  why: "No legal record of unauthorized entry. The crews continue." },
-        { star: 'whitmore',  passion: 'route',    delta: +6,  why: "Unchallenged survey progress. The season's marking work is complete." },
+        { star: 'whitmore',  passion: 'corridor', delta: +6,  why: "Unchallenged survey progress. The season's marking work is complete." },
       ],
     },
   },
@@ -549,7 +601,7 @@ const ACTIONS = [
       body: "Four years after Caleb's arrival, the Reed brothers have incorporated under territorial law. Solomon manages the post; Caleb runs the Nevada routes. The introduction cost you standing at the Merchant's Association. It built something that will outlast the railroad's corridor planning.",
       effects: [
         { star: 'solomon',  passion: 'roots',   delta: +25, why: "The incorporated company is now a permanent valley institution." },
-        { star: 'whitmore', passion: 'control', delta: -12, why: "An independent trading company of this scale complicates railroad commerce claims in the corridor." },
+        { star: 'whitmore', passion: 'corridor', delta: -12, why: "An independent trading company of this scale complicates railroad commerce claims in the corridor." },
       ],
     },
   },
@@ -563,8 +615,10 @@ const ACTIONS = [
       { star: 'esperanza', passion: 'land',      delta: +28, why: "The grant is now held in a living name that can actively defend it in court." },
       { star: 'esperanza', passion: 'trust',     delta: +22, why: "You navigated a system that is designed to exclude her, on her behalf. She will not forget." },
       { star: 'esperanza', passion: 'coalition', delta: +14, why: "Her secure title gives the coalition a concrete legal anchor." },
-      { star: 'whitmore',  passion: 'control',   delta: -20, why: "A title in a living name is far harder to challenge than an estate filing." },
-      { star: 'whitmore',  passion: 'route',     delta: -14, why: "The re-recorded deed strengthens the boundary against corridor encroachment." },
+      { star: 'whitmore',  passion: 'corridor',  delta: -24, why: "A title in a living name both strengthens the boundary against encroachment and is far harder to challenge in court." },
+    ],
+    repBonus: [
+      { star: 'esperanza', repState: 'HH', extraEffects: [{ star: 'esperanza', passion: 'trust', delta: +10, why: "Given the complicated history between you, this action lands differently. She did not expect it and says so." }] },
     ],
     fame:   { esperanza: +22, solomon: +6, whitmore: -16 },
     infamy: { esperanza:   0, solomon:  0, whitmore: +16 },
@@ -574,7 +628,7 @@ const ACTIONS = [
       body: "Six years after the re-recording, Pacific Railroad's legal challenge to the Vallejo title has been denied at final appeal. The grant stands. Esperanza Vallejo's name is in the record and will remain there. The intermediary who made the filing possible was not mentioned in the court's opinion. They did not need to be.",
       effects: [
         { star: 'esperanza', passion: 'land',      delta: +25, why: "Final appeal denial. The title is permanent." },
-        { star: 'whitmore',  passion: 'route',     delta: -20, why: "The corridor's northern segment is now legally obstructed by an unassailable claim." },
+        { star: 'whitmore',  passion: 'corridor',  delta: -20, why: "The corridor's northern segment is now legally obstructed by an unassailable claim." },
         { star: 'esperanza', passion: 'coalition', delta: +18, why: "A won case is more valuable to the coalition than any amount of organizing." },
       ],
     },
@@ -587,6 +641,101 @@ const ACTIONS = [
         { star: 'esperanza', passion: 'coalition', delta: -8,  why: "The coalition needed a secured title as its legal anchor. It did not materialize." },
       ],
     },
+  },
+
+  // ─── REPAIR ACTIONS ──────────────────────────────────────────────────────────
+  // Gate behind prior damage (requiresPassionBelow). All cost you with a third party.
+  // Cheap repair makes earlier decisions meaningless; these are not cheap.
+
+  {
+    id: 'remedy_esperanza_trust', ya: 1820, source: 'esperanza', msgType: 'Reparation',
+    requiresPassionBelow: { star: 'esperanza', passion: 'trust', threshold: -25 },
+    dispatch: "Make a Public Declaration in Support of Californio Titles",
+    desc: "You can't undo what you did, but you can say something publicly that costs you something. A formal declaration in support of Californio land titles — filed with the territorial recorder, not just spoken at a dinner — puts your name against the same machine you helped. Whitmore will see the filing before the ink is dry. The gap between what you said then and what you are saying now will be in the public record permanently.",
+    result: "SETTLER FILES PUBLIC DECLARATION IN SUPPORT OF CALIFORNIO TITLES — Statement entered into territorial record.",
+    resultBody: "A local landholder has filed a formal declaration with the territorial recorder affirming the legitimacy of Californio land grants under their original deeds. The statement names no specific properties but is understood to speak to the Vallejo parcel in particular. J.T. Whitmore has requested a copy. Esperanza Vallejo has not commented publicly.",
+    effects: [
+      { star: 'esperanza', passion: 'trust',     delta: +22, why: "A public declaration is not the same as undoing the damage. But it is a formal record, and she knows the cost." },
+      { star: 'esperanza', passion: 'coalition', delta: +10, why: "The coalition treats a public Anglo declaration as a meaningful shift in the political landscape." },
+      { star: 'whitmore',  passion: 'corridor',  delta: -14, why: "A declaration of this kind directly complicates the corridor's legal position." },
+      { star: 'whitmore',  passion: 'standing',  delta:  -8, why: "The company will note your reversal. Whitmore answers for the people he recommended." },
+    ],
+    fame:   { esperanza: +14, solomon: +6, whitmore: -10 },
+    infamy: { esperanza:  -8, solomon:  0, whitmore: +10 },
+    def: null,
+  },
+  {
+    id: 'remedy_solomon_autonomy', ya: 1818, source: 'solomon', msgType: 'Reparation',
+    requiresTaken: 'federal_claim',
+    requiresPassionBelow: { star: 'solomon', passion: 'autonomy', threshold: -25 },
+    dispatch: "Dissolve Your Federal Business Arrangement with the Railroad",
+    desc: "You have obligations to the railroad that created the entanglement Solomon is still paying for. Withdrawing from those arrangements — ending the federal paperwork, walking away from the corridor's commercial filing — is not costless. Whitmore will know within the week. But Solomon will also know, and that has come to matter more than you expected it to.",
+    result: "SETTLER WITHDRAWS FROM RAILROAD COMMERCIAL FILINGS — Federal land arrangement formally dissolved.",
+    resultBody: "A local landholder has formally withdrawn from commercial filings associated with Pacific Railroad's northern corridor. J.T. Whitmore declined to comment. Solomon Reed, reached at his post, said only that he had noted the development.",
+    effects: [
+      { star: 'solomon',  passion: 'autonomy', delta: +20, why: "You removed yourself from the federal apparatus on his behalf. He will not forget the cost of what you gave up." },
+      { star: 'solomon',  passion: 'roots',    delta: +10, why: "A valley with one less federal entanglement is better for what he has built." },
+      { star: 'whitmore', passion: 'corridor', delta: -12, why: "Losing a co-filer complicates the corridor's commercial claims." },
+      { star: 'whitmore', passion: 'standing', delta:  -8, why: "He vouched for you. Your reversal reflects on him. The company will notice." },
+    ],
+    fame:   { esperanza: +6, solomon: +12, whitmore:  -8 },
+    infamy: { esperanza:  0, solomon:  -6, whitmore:  +8 },
+    def: null,
+  },
+  {
+    id: 'remedy_whitmore_standing', ya: 1822, source: 'whitmore', msgType: 'Reparation',
+    requiresPassionBelow: { star: 'whitmore', passion: 'standing', threshold: -25 },
+    dispatch: "Supply Whitmore with Evidence for His Audit Defense",
+    desc: "The company auditor is in the valley and Whitmore's position is weaker than anyone knows. You have correspondence, survey records, and testimony that could clear the questions the auditor is asking. Giving it to him saves his career — and gives him leverage over valley land questions he may use against you for years. It will cost you with Esperanza, whose interests run directly opposite his. A man you help out of a crisis owns you a little, and he knows it.",
+    result: "RAILROAD AUDITOR FINDS SURVEY RECORDS IN ORDER — Whitmore cleared of irregularity charges.",
+    resultBody: "Pacific Railroad's northern survey audit has concluded without finding irregularities. J.T. Whitmore confirmed that local cooperation contributed to the result. The auditor departed south. Esperanza Vallejo declined to comment on the findings.",
+    effects: [
+      { star: 'whitmore',  passion: 'standing', delta: +25, why: "The audit resolved in his favor. His position in the company is restored." },
+      { star: 'whitmore',  passion: 'corridor', delta: +10, why: "With the audit cleared, survey work resumes at full pace." },
+      { star: 'esperanza', passion: 'trust',    delta: -16, why: "You handed Whitmore the evidence that protects the railroad. She knows what that means for the valley." },
+      { star: 'esperanza', passion: 'land',     delta: -10, why: "A restored Whitmore is a more effective adversary against the grant." },
+    ],
+    fame:   { esperanza: -8, solomon: 0, whitmore: +16 },
+    infamy: { esperanza: +8, solomon: 0, whitmore:   0 },
+    def: null,
+  },
+
+  // ─── BETRAYAL ACTIONS ─────────────────────────────────────────────────────────
+  // Gate behind high positive passion (requiresPassionAbove). Give high-positive
+  // relationships actual stakes — something to lose, not just something to maintain.
+
+  {
+    id: 'exploit_esperanza_trust', ya: 1823, source: 'esperanza', msgType: 'Exploitation',
+    requiresPassionAbove: { star: 'esperanza', passion: 'trust', threshold: 50 },
+    moral: '"Thou shalt not bear false witness against thy neighbour." — Exodus 20:16',
+    dispatch: "Use the Coalition's Private Records to Clear a Legal Challenge to Your Own Land",
+    desc: "The coalition archive she shared with you contains boundary records that predate the railroad's entire filing history. You can use them — not to protect the grant, but to resolve a legal challenge to your own holdings that has nothing to do with hers. The records won't be returned. The use will become clear to anyone who reads the filing carefully. She trusted you with something. You are deciding what that means.",
+    result: "SETTLER RESOLVES LAND DISPUTE USING CALIFORNIO RECORDS — Pre-annexation documents cited in private filing.",
+    resultBody: "A local landholder has resolved a disputed land claim by citing pre-annexation Californio boundary records in a private territorial filing. The records' origin has not been publicly confirmed. Esperanza Vallejo declined to comment. Several coalition families have reportedly asked her directly about the filing.",
+    effects: [
+      { star: 'esperanza', passion: 'trust',     delta: -35, why: "She gave you those records for one purpose. What you did with them is a kind of theft that cannot be undone." },
+      { star: 'esperanza', passion: 'coalition', delta: -20, why: "Coalition members who learn how the records were used hold her responsible for the exposure." },
+      { star: 'solomon',   passion: 'autonomy',  delta: -10, why: "Using someone's trust as a legal instrument without their knowledge is the kind of thing he files and doesn't forgive." },
+    ],
+    fame:   { esperanza: -16, solomon: -8, whitmore: +6 },
+    infamy: { esperanza: +20, solomon: +8, whitmore:  0 },
+    def: null,
+  },
+  {
+    id: 'call_solomon_loan', ya: 1824, source: 'solomon', msgType: 'Claim',
+    requiresPassionAbove: { star: 'solomon', passion: 'roots', threshold: 45 },
+    dispatch: "Demand Public Repayment of the Warehouse Loan",
+    desc: "The private note on Solomon's warehouse expansion is yours to call in whenever you choose. Demanding repayment publicly — through the territorial bank rather than privately, as the agreement specified — turns a private debt into a public instrument. The money will come. Solomon built his entire operation by staying off the federal record. You are about to put him onto it.",
+    result: "REED'S TRADING POST DEBT CALLED — Private warehouse note enters public territorial record.",
+    resultBody: "A private loan note backing the expansion of Reed's Trading Post has been formally called for repayment through the territorial bank. Solomon Reed is expected to meet the obligation. He declined to comment. The loan's terms, previously unrecorded, are now a matter of public record.",
+    effects: [
+      { star: 'solomon', passion: 'roots',    delta: -25, why: "Calling the note publicly puts his most important holding into a federal record he spent years keeping it out of." },
+      { star: 'solomon', passion: 'autonomy', delta: -20, why: "A private arrangement made public against his wishes is a violation he will not separate from the person who did it." },
+      { star: 'solomon', passion: 'caleb',    delta: -10, why: "Caleb's future at the post is now entangled with a federal debt record he didn't choose." },
+    ],
+    fame:   { esperanza: -6, solomon: -20, whitmore: +8 },
+    infamy: { esperanza: +6, solomon: +22, whitmore:  0 },
+    def: null,
   },
 ];
 
@@ -676,6 +825,13 @@ function reputation(fame, infamy, starId) {
        :             REP_LABELS[starId].LL;
 }
 
+// Returns the two-letter rep state key ('HH'|'HL'|'LH'|'LL') for a star object.
+// Used by the reducer to check repBonus conditions and by ActionCard to show active bonuses.
+function repStateKey(star) {
+  const fH = star.fame >= 25, iH = star.infamy >= 20;
+  return fH && iH ? 'HH' : fH ? 'HL' : iH ? 'LH' : 'LL';
+}
+
 // ─── REACTIVE EVENTS ─────────────────────────────────────────────────────────
 // Fire automatically when a passion crosses a threshold.
 // direction: 'above' fires when value rises past threshold, 'below' when it falls past.
@@ -689,7 +845,6 @@ const REACTIVE_EVENTS = [
     body: "Esperanza Vallejo has filed a formal complaint with the territorial court naming a local landholder as party to disputed boundary claims. She cited a pattern of actions working against Californio land interests. The filing is now public record.",
     effects: [
       { star: 'esperanza', passion: 'land', delta: +8, why: "Filing publicly shifts legal ground in her favor." },
-      { star: 'esperanza', passion: 'infamy_self', delta: 0 },
     ],
     fameEffects:   { esperanza: 0, solomon: 0, whitmore: 0 },
     infamyEffects: { esperanza: +20, solomon: +5, whitmore: -5 },
@@ -735,7 +890,7 @@ const REACTIVE_EVENTS = [
     headline: 'WHITMORE NAMED DISTRICT SUPERVISOR — Pacific Railroad elevates northern corridor lead.',
     body: "J.T. Whitmore has been named District Supervisor for the northern corridor, bringing with him full company authority over land filings in the valley. His promotion is a direct consequence of his progress here. The company now acts through him with considerably more force.",
     effects: [
-      { star: 'whitmore', passion: 'control', delta: +15, why: "Supervisory authority expands his ability to suppress competing claims." },
+      { star: 'whitmore', passion: 'corridor', delta: +15, why: "Supervisory authority expands his ability to suppress competing claims." },
     ],
     fameEffects:   { esperanza: 0, solomon: 0, whitmore: +15 },
     infamyEffects: { esperanza: 0, solomon: 0, whitmore: 0 },
@@ -744,7 +899,7 @@ const REACTIVE_EVENTS = [
   },
   {
     id: 're_whitmore_route_stalled',
-    star: 'whitmore', passion: 'route', threshold: -50, direction: 'below',
+    star: 'whitmore', passion: 'corridor', threshold: -50, direction: 'below',
     headline: 'COMPANY SENDS AUDITOR NORTH — Pacific Railroad reviews corridor progress.',
     body: "Pacific Railroad has dispatched an internal auditor to review the northern survey's progress. Whitmore met the auditor's stage alone. What was said between them is not public. What follows from it will be.",
     effects: [
@@ -752,6 +907,20 @@ const REACTIVE_EVENTS = [
     ],
     fameEffects:   { esperanza: 0, solomon: 0, whitmore: 0 },
     infamyEffects: { esperanza: 0, solomon: 0, whitmore: +8 },
+    unlocksActions: [],
+    isNegative: true,
+  },
+  {
+    id: 're_whitmore_margaret_breaking',
+    star: 'whitmore', passion: 'margaret', threshold: -50, direction: 'below',
+    headline: "WHITMORE PUSHES UNAUTHORIZED SURVEY NORTH — Corridor progress accelerates beyond company sanction.",
+    body: "J.T. Whitmore has ordered survey crews onto contested parcels without waiting for the federal filings that would legitimize the work. The move advances the corridor timeline but creates legal exposure the company did not authorize. His personal correspondence east has reportedly gone unanswered for some months.",
+    effects: [
+      { star: 'whitmore', passion: 'standing', delta: -12, why: "Unauthorized field decisions draw company scrutiny. He is trying to finish and go home and it is making him reckless." },
+      { star: 'whitmore', passion: 'corridor', delta: +8,  why: "The reckless push gains ground on the survey — but the paperwork will not hold under review." },
+    ],
+    fameEffects:   { esperanza: 0, solomon: 0, whitmore: 0 },
+    infamyEffects: { esperanza: 0, solomon: 0, whitmore: +6 },
     unlocksActions: [],
     isNegative: true,
   },
@@ -773,7 +942,7 @@ const UNLOCKABLE_ACTIONS = [
     effects: [
       { star: 'esperanza', passion: 'land',      delta: +20, why: "The archive used as you intended. The legal challenge is serious." },
       { star: 'esperanza', passion: 'coalition', delta: +15, why: "Using the records publicly affirms the coalition's strategy." },
-      { star: 'whitmore',  passion: 'route',     delta: -25, why: "Pre-annexation records are the most dangerous thing the railroad's surveyors can face." },
+      { star: 'whitmore',  passion: 'corridor',  delta: -25, why: "Pre-annexation records are the most dangerous thing the railroad's surveyors can face." },
       { star: 'whitmore',  passion: 'standing',  delta: -12, why: "The company will hold him responsible for this exposure." },
     ],
     fame:   { esperanza: +14, solomon: +5, whitmore: -18 },
@@ -826,7 +995,7 @@ const CONVERGENCE_EVENTS = [
     id: 'conv_land_corridor',
     condition: (stars) =>
       stars.esperanza.passions.land.value >= 30 &&
-      stars.whitmore.passions.route.value >= 30,
+      stars.whitmore.passions.corridor.value >= 30,
     headline: 'THE NORTHERN BOUNDARY — A Direct Confrontation',
     body: "Esperanza Vallejo and J.T. Whitmore have both called on you in the same week regarding the same strip of land. The northern parcel sits directly across the railroad's planned route. Esperanza holds a surveyed claim. Whitmore holds a federal filing. They cannot both be right. They both know which way you have leaned. Now they want to know which way you will stand.",
     choices: [
@@ -837,7 +1006,7 @@ const CONVERGENCE_EVENTS = [
         effects: [
           { star: 'esperanza', passion: 'land',     delta: +22, why: "Your statement gives the survey legal standing it didn't have on its own." },
           { star: 'esperanza', passion: 'trust',    delta: +18, why: "When it came to a direct choice, you chose her." },
-          { star: 'whitmore',  passion: 'route',    delta: -20, why: "The statement directly obstructs his filing." },
+          { star: 'whitmore',  passion: 'corridor', delta: -20, why: "The statement directly obstructs his filing." },
           { star: 'whitmore',  passion: 'standing', delta: -15, why: "Losing a local ally publicly is a failure the company will notice." },
         ],
         fameEffects:   { esperanza: +18, solomon: +8, whitmore: -14 },
@@ -848,7 +1017,7 @@ const CONVERGENCE_EVENTS = [
         label: "Stand with Whitmore — the federal filing supersedes the old grant",
         desc: "You confirm that the federal filing is the controlling document. You have seen the survey. You believe the corridor is legitimate. Esperanza will hear what you said within the week.",
         effects: [
-          { star: 'whitmore',  passion: 'route',    delta: +22, why: "Your confirmation shores up the filing's local legitimacy." },
+          { star: 'whitmore',  passion: 'corridor', delta: +22, why: "Your confirmation shores up the filing's local legitimacy." },
           { star: 'whitmore',  passion: 'standing', delta: +15, why: "He delivered a local endorsement under pressure. The company approves." },
           { star: 'esperanza', passion: 'trust',    delta: -28, why: "Direct opposition at the moment of confrontation. She will not forget." },
           { star: 'esperanza', passion: 'land',     delta: -18, why: "Your confirmation weakens the survey's legal position." },
@@ -872,10 +1041,10 @@ const CONVERGENCE_EVENTS = [
   {
     id: 'conv_solomon_coalition',
     condition: (stars) =>
-      stars.solomon.passions.autonomy.value <= -30 &&
+      Math.abs(stars.solomon.passions.autonomy.value) >= 30 &&
       stars.esperanza.passions.coalition.value >= 30,
     headline: 'AN UNLIKELY MEETING — Reed and Vallejo',
-    body: "Solomon Reed and Esperanza Vallejo have separately asked you to arrange a meeting between them. Solomon wants access to the coalition's legal network to protect the post. Esperanza wants Solomon's trade routes as an alternative to the federal commerce system. They have never spoken directly. You are the only person both of them trust. Facilitating this changes all three relationships. So does refusing.",
+    body: "Solomon Reed and Esperanza Vallejo have separately asked you to arrange a meeting between them. Solomon's trading independence and Esperanza's coalition have both grown significant enough that each sees something the other has. She wants his routes as an alternative to the federal commerce system. He wants her legal network as protection the post could not otherwise afford. They have never spoken directly. You are the only person both of them trust. Facilitating this changes all three relationships. So does refusing.",
     choices: [
       {
         id: 'facilitate_meeting',
@@ -885,7 +1054,7 @@ const CONVERGENCE_EVENTS = [
           { star: 'esperanza', passion: 'coalition', delta: +20, why: "A trade alliance with Reed's network materially strengthens the coalition's independence." },
           { star: 'solomon',   passion: 'autonomy',  delta: +18, why: "Coalition legal cover is exactly the kind of protection he couldn't build alone." },
           { star: 'solomon',   passion: 'roots',     delta: +12, why: "An alliance this useful makes the post harder to uproot." },
-          { star: 'whitmore',  passion: 'control',   delta: -20, why: "A coordinated Californio-freedmen alliance is his worst outcome in this valley." },
+          { star: 'whitmore',  passion: 'corridor',  delta: -20, why: "A coordinated Californio-freedmen alliance is his worst outcome in this valley." },
         ],
         fameEffects:   { esperanza: +12, solomon: +12, whitmore: -14 },
         infamyEffects: { esperanza:   0, solomon:   0, whitmore: +14 },
@@ -900,6 +1069,118 @@ const CONVERGENCE_EVENTS = [
         ],
         fameEffects:   { esperanza: -8, solomon: -8, whitmore: +5 },
         infamyEffects: { esperanza:  8, solomon:  8, whitmore:  0 },
+      },
+    ],
+  },
+  {
+    id: 'conv_whitmore_personal',
+    condition: (stars) =>
+      stars.whitmore.passions.margaret.value >= 30 &&
+      stars.whitmore.passions.corridor.value >= 30,
+    headline: "THE SURVEYOR'S LETTER — Whitmore asks something off the record",
+    body: "J.T. Whitmore has asked you, quietly and without preamble, for help drafting a letter to his wife in Cincinnati. He has been in the valley for three years. He has words for federal filings but not for her. He also needs your name on a corridor extension before the Sacramento office closes at the end of the month. He hasn't connected the two requests out loud. He doesn't have to.",
+    choices: [
+      {
+        id: 'help_letter',
+        label: "Help him with the letter first",
+        desc: "You spend an afternoon on it. He postpones the filing. The company will wait. For a week, he seems like a different man.",
+        effects: [
+          { star: 'whitmore', passion: 'margaret', delta: +18, why: "You helped him say something he couldn't say alone. He will not forget that." },
+          { star: 'whitmore', passion: 'corridor', delta: -10, why: "He postponed the filing to deal with something the company doesn't recognize as important. They noticed the delay." },
+          { star: 'whitmore', passion: 'standing', delta:  -6, why: "A delayed filing is a mark against him in the company ledger." },
+        ],
+        fameEffects:   { esperanza: +4, solomon: +4, whitmore: +10 },
+        infamyEffects: { esperanza:  0, solomon:  0, whitmore:   0 },
+      },
+      {
+        id: 'push_filing_first',
+        label: "Redirect him to the filing — the letter can wait",
+        desc: "You tell him the Sacramento deadline is real and the letter can be written after. He signs the filing. He does not write the letter that week, or the week after.",
+        effects: [
+          { star: 'whitmore', passion: 'corridor', delta: +12, why: "The filing went through on time. The company is satisfied." },
+          { star: 'whitmore', passion: 'standing', delta:  +8, why: "He delivered again. The company pays attention to that." },
+          { star: 'whitmore', passion: 'margaret', delta: -18, why: "You were part of why he chose the route over the letter. He knows it. So does she, eventually." },
+        ],
+        fameEffects:   { esperanza: -4, solomon: -4, whitmore: +12 },
+        infamyEffects: { esperanza:  0, solomon:  0, whitmore:   0 },
+      },
+      {
+        id: 'attempt_both',
+        label: "Promise to help with both — the letter and the filing",
+        desc: "You tell him you'll manage both. The letter is short and impersonal. The filing goes through with a procedural objection. Neither is done well. She doesn't write back.",
+        effects: [
+          { star: 'whitmore', passion: 'corridor', delta: +5,  why: "The filing went through, technically, but it drew a procedural objection the company had to clear." },
+          { star: 'whitmore', passion: 'margaret', delta: -6,  why: "The letter was not what he needed to send. He knew it when he read it back." },
+          { star: 'whitmore', passion: 'standing', delta: -4,  why: "The procedural objection created paperwork. Minor, but noted." },
+        ],
+        fameEffects:   { esperanza: 0, solomon: 0, whitmore: +4 },
+        infamyEffects: { esperanza: 0, solomon: 0, whitmore:  0 },
+      },
+    ],
+  },
+  {
+    id: 'conv_three_star_reckoning',
+    condition: (stars, taken) => {
+      const absMacro = s => Math.abs(macropassionValue(s.passions));
+      return absMacro(stars.esperanza) >= 20 && absMacro(stars.solomon) >= 20 && absMacro(stars.whitmore) >= 20;
+    },
+    headline: 'THREE LETTERS IN ONE WEEK — All of them need something.',
+    bodyFn: (taken) => taken.includes('lend_solomon')
+      ? "Three letters arrive in the same week. Esperanza Vallejo needs a witness at a boundary hearing in Sacramento — the case that will determine whether the grant survives the decade. Solomon Reed needs help navigating a federal challenge to his warehouse deed before the territorial office closes its docket; the post he built with your loan is now at legal risk. J.T. Whitmore needs your name on a critical corridor extension before it lapses. Each of them knows you are the right person for what they need. None of them knows about the other two letters. You cannot be in three places at once. The two you don't answer will remember your absence in different ways."
+      : "Three letters arrive in the same week. Esperanza Vallejo needs a witness at a boundary hearing in Sacramento — the case that will determine whether the grant survives the decade. Solomon Reed needs your name on a territorial filing that has come due without warning; he cannot navigate it alone and he will not ask twice. J.T. Whitmore needs your name on a critical corridor extension before it lapses. Each of them knows you are the right person for what they need. None of them knows about the other two letters. You cannot be in three places at once. The two you don't answer will remember your absence in different ways.",
+    choices: [
+      {
+        id: 'answer_esperanza',
+        label: "Answer Esperanza — appear at the boundary hearing",
+        descFn: (taken) => taken.includes('lend_solomon')
+          ? "You go to Sacramento. The hearing goes better with you there. Solomon's deed challenge draws an adverse ruling without you. Whitmore's corridor extension lapses and has to be re-filed at cost."
+          : "You go to Sacramento. The hearing goes better with you there. Solomon's filing goes uncontested without you. Whitmore's corridor extension lapses and has to be re-filed at cost.",
+        effects: [
+          { star: 'esperanza', passion: 'land',     delta: +20, why: "Your presence at the hearing gave the Vallejo survey its best legal day." },
+          { star: 'esperanza', passion: 'trust',    delta: +14, why: "When it came to a direct choice across three demands, you came." },
+          { star: 'solomon',   passion: 'roots',    delta: -14, why: (taken) => taken.includes('lend_solomon')
+              ? "The adverse ruling while you were absent has put his warehouse deed in question."
+              : "The filing went badly without you. His footing in the valley is less certain." },
+          { star: 'whitmore',  passion: 'standing', delta: -12, why: "The lapsed corridor extension is a failure he has to explain to the company." },
+        ],
+        fameEffects:   { esperanza: +16, solomon:  -8, whitmore: -10 },
+        infamyEffects: { esperanza:   0, solomon:  +6, whitmore: +10 },
+      },
+      {
+        id: 'answer_solomon',
+        labelFn: (taken) => taken.includes('lend_solomon')
+          ? "Answer Solomon — defend the warehouse deed"
+          : "Answer Solomon — help navigate the territorial filing",
+        descFn: (taken) => taken.includes('lend_solomon')
+          ? "You go to the territorial office with Solomon. The deed challenge is turned back. The post you helped build is secure. Esperanza's hearing in Sacramento proceeds without its expected witness. Whitmore's extension lapses."
+          : "You go to the territorial office with Solomon. The filing is resolved in his favor. Esperanza's hearing in Sacramento proceeds without its expected witness. Whitmore's extension lapses.",
+        effects: [
+          { star: 'solomon',   passion: 'roots',    delta: +18, why: (taken) => taken.includes('lend_solomon')
+              ? "The deed challenge was turned back. The post is secure."
+              : "The filing resolved in his favor. His position in the valley is firmer." },
+          { star: 'solomon',   passion: 'autonomy', delta: +10, why: "You navigated federal process on his behalf without entangling him in it further." },
+          { star: 'esperanza', passion: 'trust',    delta: -16, why: "She had asked specifically for you. You sent word you couldn't come. She went alone." },
+          { star: 'whitmore',  passion: 'standing', delta: -12, why: "The lapsed extension is another failure on his record with the company." },
+        ],
+        fameEffects:   { esperanza: -10, solomon: +16, whitmore: -10 },
+        infamyEffects: { esperanza: +10, solomon:   0, whitmore: +10 },
+      },
+      {
+        id: 'answer_whitmore',
+        label: "Answer Whitmore — sign the corridor extension",
+        descFn: (taken) => taken.includes('lend_solomon')
+          ? "You sign the extension and it goes through. Esperanza's hearing draws a split ruling — not a loss, but not the win she needed. Solomon's deed challenge draws an adverse ruling."
+          : "You sign the extension and it goes through. Esperanza's hearing draws a split ruling — not a loss, but not the win she needed. Solomon's filing goes against him.",
+        effects: [
+          { star: 'whitmore',  passion: 'corridor', delta: +16, why: "The extension went through. The corridor is secured for another season." },
+          { star: 'whitmore',  passion: 'standing', delta: +10, why: "He delivered again. The company notes the name on the filing." },
+          { star: 'esperanza', passion: 'trust',    delta: -18, why: "She had asked specifically for you. You were at Whitmore's office. She understands exactly what that means." },
+          { star: 'solomon',   passion: 'roots',    delta: -14, why: (taken) => taken.includes('lend_solomon')
+              ? "The adverse ruling on his deed has put the warehouse in question. He knows where you were."
+              : "The filing went against him. He knows where you were." },
+        ],
+        fameEffects:   { esperanza: -12, solomon: -10, whitmore: +18 },
+        infamyEffects: { esperanza: +12, solomon: +10, whitmore:   0 },
       },
     ],
   },
@@ -927,7 +1208,7 @@ const GUESTS = [
           { star: 'esperanza', passion: 'trust',    delta: +8,  why: "You defied the federal marshal. That is the kind of action she has been watching for." },
           { star: 'solomon',   passion: 'autonomy', delta: +8,  why: "You acted outside federal record and said nothing. He will hear about this." },
           { star: 'solomon',   passion: 'caleb',    delta: +6,  why: "You sheltered a man crossing three territories to find his sister. He knows what that costs." },
-          { star: 'whitmore',  passion: 'control',  delta: -6,  why: "The marshal left the crossroads empty-handed. Word of that travels." },
+          { star: 'whitmore',  passion: 'corridor', delta: -6,  why: "The marshal left the crossroads empty-handed. Word of that travels." },
         ],
         fameEffects:   { esperanza: +4, solomon: +10, whitmore: 0 },
         infamyEffects: { esperanza: 0,  solomon: 0,  whitmore: +8 },
@@ -959,7 +1240,7 @@ const GUESTS = [
           { star: 'solomon',   passion: 'autonomy', delta: -16, why: "You handed someone over to the federal apparatus. That is not a neutral act in his accounting." },
           { star: 'solomon',   passion: 'caleb',    delta: -10, why: "You sent a man searching for his sister into custody. He knows what that means." },
           { star: 'esperanza', passion: 'trust',    delta: -12, why: "You cooperated with federal authority against an outsider. She is taking notes." },
-          { star: 'whitmore',  passion: 'control',  delta: +8,  why: "You upheld the federal order when it cost you something. He respects that." },
+          { star: 'whitmore',  passion: 'corridor', delta: +8,  why: "You upheld the federal order when it cost you something. He respects that." },
         ],
         fameEffects:   { esperanza: -8, solomon: -18, whitmore: +5 },
         infamyEffects: { esperanza: +6, solomon: +14, whitmore: 0 },
@@ -985,7 +1266,7 @@ const GUESTS = [
         effects: [
           { star: 'solomon',   passion: 'autonomy', delta: +12, why: 'Word travels in the freedmen network. What you did here will be known to those who need to know it.' },
           { star: 'esperanza', passion: 'trust',    delta: +7,  why: "You opened your door against the federal order. That is the kind of thing that travels in the right channels." },
-          { star: 'whitmore',  passion: 'control',  delta: -8,  why: "A settler running an unsanctioned operation out of the crossroads is a problem the railroad will eventually have to account for." },
+          { star: 'whitmore',  passion: 'corridor', delta: -8,  why: "A settler running an unsanctioned operation out of the crossroads is a problem the railroad will eventually have to account for." },
         ],
         fameEffects:   { esperanza: +4, solomon: +20, whitmore: 0 },
         infamyEffects: { esperanza: 0,  solomon: 0,  whitmore: +14 },
@@ -1126,8 +1407,9 @@ const SEASONS = ['Spring', 'Summer', 'Autumn', 'Winter'];
 const SEASON_IDX = { Spring: 0, Summer: 1, Autumn: 2, Winter: 3 };
 const dc = x => JSON.parse(JSON.stringify(x));
 
-function seasonsRemaining(year, season, expires) {
-  return Math.max(0, expires * 4 - (year * 4 + SEASON_IDX[season]));
+function seasonsRemaining(year, season, expires, expiresSeason) {
+  const expiryTick = expires * 4 + (expiresSeason ? SEASON_IDX[expiresSeason] : 0);
+  return Math.max(0, expiryTick - (year * 4 + SEASON_IDX[season]));
 }
 
 function applyE(stars, effects) {
@@ -1178,7 +1460,7 @@ function checkEvents(state, prevStars, newLog) {
                                               : (prev > ev.threshold && curr <= ev.threshold);
     if (!crossed) continue;
     fired.push(ev.id);
-    if (ev.effects.length) stars = applyE(stars, ev.effects.filter(e => e.passion !== 'infamy_self'));
+    if (ev.effects.length) stars = applyE(stars, ev.effects);
     stars = applyFI(stars, ev.fameEffects, ev.infamyEffects);
     newEntries.push({
       id: `re-${ev.id}`,
@@ -1197,9 +1479,19 @@ function checkEvents(state, prevStars, newLog) {
   for (const ev of CONVERGENCE_EVENTS) {
     if (fired.includes(ev.id)) continue;
     if (pending.find(p => p.id === ev.id)) continue;
-    if (!ev.condition(stars)) continue;
+    if (!ev.condition(stars, state.taken)) continue;
     fired.push(ev.id);
-    pending.push({ id: ev.id, headline: ev.headline, body: ev.body, choices: ev.choices });
+    const resolvedBody = typeof ev.bodyFn === 'function' ? ev.bodyFn(state.taken) : ev.body;
+    const resolvedChoices = ev.choices.map(c => ({
+      ...c,
+      label: typeof c.labelFn === 'function' ? c.labelFn(state.taken) : c.label,
+      desc:  typeof c.descFn  === 'function' ? c.descFn(state.taken)  : c.desc,
+      effects: c.effects.map(ef => ({
+        ...ef,
+        why: typeof ef.why === 'function' ? ef.why(state.taken) : ef.why,
+      })),
+    }));
+    pending.push({ id: ev.id, headline: ev.headline, body: resolvedBody, choices: resolvedChoices });
   }
 
   return { ...state, stars, firedEvents: fired, pendingChoices: pending, unlockedActions: unlocked, log: [...newEntries, ...state.log.filter(e => !newEntries.find(n => n.id === e.id))] };
@@ -1208,7 +1500,7 @@ function checkEvents(state, prevStars, newLog) {
 const INIT = {
   year: 1810, season: 'Spring', quietCount: 0,
   stars: INITIAL_STARS, taken: [], log: [], deferred: [],
-  firedEvents: [], pendingChoices: [], unlockedActions: [], seenActions: [],
+  firedEvents: [], pendingChoices: [], unlockedActions: [], seenActions: [], seenStars: [],
   revealedPassions: [],
   pendingGuest: null, guestHistory: [], homesteadLog: [],
   ruined: false, ruinHeadline: null, ruinReason: null,
@@ -1221,6 +1513,18 @@ function reducer(state, action) {
     const prevStars = state.stars;
     let stars = applyE(state.stars, act.effects);
     stars = applyFI(stars, act.fame, act.infamy);
+    // Reputation-gated bonus effects — fire if player's rep state with the target Star
+    // matches the required key at the moment the action is taken (checked pre-application).
+    if (act.repBonus) {
+      const preRepStars = state.stars; // snapshot before effects
+      for (const rb of act.repBonus) {
+        if (!preRepStars[rb.star]) continue;
+        if (repStateKey(preRepStars[rb.star]) !== rb.repState) continue;
+        if (rb.extraEffects?.length) stars = applyE(stars, rb.extraEffects);
+        if (rb.extraFame) stars = applyFI(stars, rb.extraFame, {});
+        if (rb.extraInfamy) stars = applyFI(stars, {}, rb.extraInfamy);
+      }
+    }
     const entry = {
       id: `${act.id}-${state.year}-${state.season}`,
       year: state.year, season: state.season,
@@ -1273,18 +1577,25 @@ function reducer(state, action) {
       pendingGuest = null;
     }
 
-    // Inaction consequences — fire when an expiring action passes untaken
-    if (isWinter) {
+    // Inaction consequences — fire when an expiring action passes untaken.
+    // Season-level: fires when we cross into expiresSeason within the expiry year.
+    // Year-level:   fires on the Winter->Spring boundary entering the expiry year.
+    {
       const allKnownActions = [...ACTIONS, ...UNLOCKABLE_ACTIONS];
       for (const act of allKnownActions) {
-        if (act.expires === nextYear && !state.taken.includes(act.id) && act.inaction) {
+        if (state.taken.includes(act.id) || !act.inaction) continue;
+        const seasonExpired = act.expiresSeason &&
+          act.expires === nextYear &&
+          SEASON_IDX[nextSeason] >= SEASON_IDX[act.expiresSeason];
+        const yearExpired = !act.expiresSeason && isWinter && act.expires === nextYear;
+        if (seasonExpired || yearExpired) {
           stars = applyE(stars, act.inaction.effects);
           newEntries.push({
             id: `inaction-${act.id}-${nextYear}`,
-            year: nextYear, season: 'Winter',
+            year: nextYear, season: nextSeason,
             headline: act.inaction.headline,
             body: act.inaction.body,
-            decision: `Inaction: "${act.dispatch}" — the window closed.`,
+            decision: `Inaction: "${act.dispatch}" -- the window closed.`,
             effects: act.inaction.effects,
             isDeferred: false, isQuiet: false, isReactive: false, isDispatch: false, isInaction: true,
           });
@@ -1318,6 +1629,24 @@ function reducer(state, action) {
       }
     }
 
+    // Passion neglect decay — relationships not actively tended lose ground slowly.
+    // For each Star, scan the last 8 log entries (roughly 2 years). If none involve
+    // that Star's effects, positive passions drift down by 1 point per season.
+    // Only positive passions decay (negative ones require active repair to shift).
+    // The floor is 0 — neglect can fully erode a relationship, but slowly.
+    for (const starId of Object.keys(stars)) {
+      const recentInteraction = state.log.slice(0, 8).some(
+        e => !e.isQuiet && !e.isDeferred && e.effects?.some(ef => ef.star === starId)
+      );
+      if (!recentInteraction) {
+        for (const passion of Object.values(stars[starId].passions)) {
+          if (passion.value > 0) {
+            passion.value = Math.max(0, passion.value - 1);
+          }
+        }
+      }
+    }
+
     // World dispatches — arrive in the Spring of their target year
     const updatedFiredEvents = [...state.firedEvents];
     if (nextSeason === 'Spring') {
@@ -1344,10 +1673,21 @@ function reducer(state, action) {
     // Surface next available guest for the incoming season
     pendingGuest = GUESTS.find(g => g.ya <= nextYear && g.expires > nextYear && !guestHistory.includes(g.id)) || null;
 
+    const cTick = state.year * 4 + SEASON_IDX[state.season];
     const allAvailable = [...ACTIONS, ...UNLOCKABLE_ACTIONS.filter(a => state.unlockedActions.includes(a.id))]
-      .filter(a => !state.taken.includes(a.id) && (a.ya ?? 0) <= state.year && (!a.expires || a.expires > state.year) && (!a.requiresPassionVisible || isPassionVisible(stars, a.requiresPassionVisible.star, a.requiresPassionVisible.passion, state.revealedPassions)) && (!a.requiresTaken || state.taken.includes(a.requiresTaken)))
+      .filter(a => !state.taken.includes(a.id)
+        && (a.ya ?? 0) * 4 + (a.yaSeasonIdx ?? 0) <= cTick
+        && (!a.expires || a.expires * 4 + (a.expiresSeason ? SEASON_IDX[a.expiresSeason] : 0) > cTick)
+        && (!a.requiresPassionVisible || isPassionVisible(stars, a.requiresPassionVisible.star, a.requiresPassionVisible.passion, state.revealedPassions))
+        && (!a.requiresTaken || state.taken.includes(a.requiresTaken))
+        && (!a.requiresPassionBelow || (stars[a.requiresPassionBelow.star]?.passions[a.requiresPassionBelow.passion]?.value ?? 0) <= a.requiresPassionBelow.threshold)
+        && (!a.requiresPassionAbove || (stars[a.requiresPassionAbove.star]?.passions[a.requiresPassionAbove.passion]?.value ?? 0) >= a.requiresPassionAbove.threshold))
       .map(a => a.id);
     const seenActions = [...new Set([...state.seenActions, ...allAvailable])];
+    const revealedStarIds = [...ACTIONS, ...UNLOCKABLE_ACTIONS.filter(a => state.unlockedActions.includes(a.id))]
+      .filter(a => (a.ya ?? 0) * 4 + (a.yaSeasonIdx ?? 0) <= cTick)
+      .map(a => a.source).filter(Boolean);
+    const seenStars = [...new Set([...state.seenStars, ...revealedStarIds])];
 
     const revealedPassions = checkPassionReveals(stars, state.revealedPassions);
     const next = { ...state, year: nextYear, season: nextSeason, stars, deferred: remaining, quietCount: state.quietCount + (quietEntry ? 1 : 0), seenActions, pendingGuest, guestHistory, homesteadLog, firedEvents: updatedFiredEvents, revealedPassions };
@@ -1416,7 +1756,7 @@ function PassionBar({ passionKey, p, color }) {
 
   const fillLeft  = v < 0 ? `${50 + v * 0.5}%` : '50%';
   const fillWidth = `${Math.abs(v) * 0.5}%`;
-  const fillColor = v >= 0 ? P.posBar : P.negBar;
+  const fillColor = v >= 0 ? '#3a7e32' : '#8a2818';
 
   const tickColor   = T.bdrHi;
   const centerColor = T.bdrHi;
@@ -1562,7 +1902,10 @@ function StarCard({ star, revealedPassions }) {
 
       {/* Public Character */}
       <div style={{ marginTop: 8, borderTop: `1px solid ${T.bdr}`, paddingTop: 6 }}>
-        <HoverLabel label="Public Perception" value={rep} valueColor={T.inkFaint} valueSize={10} tooltip="What they say about you in rooms you're not in." align="left" flipUp={true} />
+        <HoverLabel label="Public Perception" value={rep.label} valueColor={T.inkFaint} valueSize={10} tooltip="What they say about you in rooms you're not in." align="left" flipUp={true} />
+        {rep.behavior && (
+          <div style={{ fontSize: 9, color: T.inkWhy, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.45, marginTop: 4, borderLeft: `2px solid ${T.bdrHi}`, paddingLeft: 5 }}>{rep.behavior}</div>
+        )}
       </div>
     </div>
   );
@@ -1574,7 +1917,7 @@ function ActionCard({ act, stars, dispatch, revealed, revealedPassions, isNew, y
   const [hov, setHov] = useState(false);
   const [expTip, setExpTip] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const seasonsLeft = act.expires ? seasonsRemaining(year, season, act.expires) : null;
+  const seasonsLeft = act.expires ? seasonsRemaining(year, season, act.expires, act.expiresSeason) : null;
   const sourceStar = act.source ? stars[act.source] : null;
   const sourceLabel = sourceStar ? sourceStar.name.split(' ')[0] + ' ' + (sourceStar.name.split(' ').slice(1).join(' ') || '') : '—';
   const sourceColor = sourceStar?.color || T.inkDim;
@@ -1632,6 +1975,9 @@ function ActionCard({ act, stars, dispatch, revealed, revealedPassions, isNew, y
 
         {!collapsed && (
           <div onClick={() => { if (!animating) dispatch({ type: 'ACT', id: act.id }); }} style={{ cursor: animating ? 'default' : 'pointer' }}>
+            {act.moral && (
+              <div style={{ fontSize: 9, color: T.inkFaint, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.6, marginBottom: 8, borderLeft: `2px solid ${T.bdrHi}`, paddingLeft: 8 }}>{act.moral}</div>
+            )}
             <div style={{ fontSize: 10, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.55, marginBottom: 10 }}>{descText}</div>
             <div style={{ borderTop: `1px solid ${T.bdr}`, paddingTop: 8 }}>
               <div style={{ fontSize: 8, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6, fontFamily: "'Courier Prime', monospace" }}>Known Effects & Consequences</div>
@@ -1665,6 +2011,32 @@ function ActionCard({ act, stars, dispatch, revealed, revealedPassions, isNew, y
                   </div>
                 );
               })}
+              {/* Reputation-gated bonus effects — shown only when current rep state matches */}
+              {act.repBonus && (() => {
+                const activeBonus = act.repBonus.filter(rb => stars[rb.star] && repStateKey(stars[rb.star]) === rb.repState);
+                if (!activeBonus.length) return null;
+                return (
+                  <div style={{ marginTop: 6, paddingTop: 6, borderTop: `1px dashed ${T.bdrHi}` }}>
+                    <div style={{ fontSize: 7, color: T.inkFaint, textTransform: 'uppercase', letterSpacing: '0.12em', fontFamily: "'Courier Prime', monospace", marginBottom: 5 }}>Additional — your current standing</div>
+                    {activeBonus.flatMap((rb, ri) => (rb.extraEffects || []).map((e, i) => {
+                      const star = stars[e.star];
+                      const passion = star?.passions[e.passion];
+                      return (
+                        <div key={`${ri}-${i}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 5, marginBottom: 5 }}>
+                          <span style={{ color: star?.color, fontSize: 7, marginTop: 2 }}>◈</span>
+                          <div>
+                            <span style={{ fontSize: 9, fontFamily: "'Courier Prime', monospace" }}>
+                              <span style={{ color: T.inkMid }}>{star?.name?.split(' ')[0]} · </span>
+                              <span style={{ color: e.delta > 0 ? '#4a8e42' : '#9a3020', fontWeight: 700 }}>{passion?.label}{deltaSymbol(e.delta)}</span>
+                            </span>
+                            {e.why && <div style={{ fontSize: 9, color: T.inkWhy, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.4, marginTop: 1 }}>{e.why}</div>}
+                          </div>
+                        </div>
+                      );
+                    }))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -1761,7 +2133,7 @@ function LogEntry({ entry, stars, revealed, revealedPassions, isNew }) {
       <div style={{ fontSize: 11, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.65, marginBottom: 10 }}>{bodyText}</div>
       {D && <div style={{ fontSize: 9, color: T.inkDim, fontFamily: "'Courier Prime', monospace", marginBottom: 8, borderTop: '1px solid #501010', paddingTop: 6 }}>Origin: {entry.decision}</div>}
       <div>
-        {visibleEffects.filter(e => e.passion !== 'infamy_self').map((e, i) => {
+        {visibleEffects.map((e, i) => {
           const star = stars?.[e.star];
           const ben  = e.delta > 0;
           return (
@@ -2006,8 +2378,9 @@ export default function ManifestGame() {
   const allPlayable = allActions
     .filter(a => {
       if (state.taken.includes(a.id)) return false;
-      if ((a.ya ?? 0) > state.year) return false;
-      if (a.expires && a.expires <= state.year) return false;
+      const cTick = state.year * 4 + SEASON_IDX[state.season];
+      if ((a.ya ?? 0) * 4 + (a.yaSeasonIdx ?? 0) > cTick) return false;
+      if (a.expires && a.expires * 4 + (a.expiresSeason ? SEASON_IDX[a.expiresSeason] : 0) <= cTick) return false;
       // Quest chain: a prior action must have been completed before this one surfaces.
       if (a.requiresTaken && !state.taken.includes(a.requiresTaken)) return false;
       // Passion visibility: use isPassionVisible() which correctly averages only the
@@ -2017,6 +2390,15 @@ export default function ManifestGame() {
       if (a.requiresPassionVisible) {
         const { star, passion } = a.requiresPassionVisible;
         if (!isPassionVisible(state.stars, star, passion, state.revealedPassions)) return false;
+      }
+      // Repair / betrayal gates — action only surfaces when passion has crossed a threshold.
+      if (a.requiresPassionBelow) {
+        const { star, passion, threshold } = a.requiresPassionBelow;
+        if ((state.stars[star]?.passions[passion]?.value ?? 0) > threshold) return false;
+      }
+      if (a.requiresPassionAbove) {
+        const { star, passion, threshold } = a.requiresPassionAbove;
+        if ((state.stars[star]?.passions[passion]?.value ?? 0) < threshold) return false;
       }
       return true;
     });
@@ -2028,8 +2410,10 @@ export default function ManifestGame() {
     return (b.ya ?? 0) - (a.ya ?? 0);
   });
   const revealed = [...new Set(
-    allActions.filter(a => (a.ya ?? 0) <= state.year || state.unlockedActions.includes(a.id))
-      .map(a => a.source).filter(Boolean)
+    allActions.filter(a => {
+      const cTick = state.year * 4 + SEASON_IDX[state.season];
+      return (a.ya ?? 0) * 4 + (a.yaSeasonIdx ?? 0) <= cTick || state.unlockedActions.includes(a.id);
+    }).map(a => a.source).filter(Boolean)
   )];
 
   const SEASONS_LIST = ['Spring', 'Summer', 'Autumn', 'Winter'];
