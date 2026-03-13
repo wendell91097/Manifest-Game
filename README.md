@@ -2,7 +2,7 @@
 
 **Live prototype:** https://manifest-henna.vercel.app/
 
-Narrative strategy game set in the 1800s American West. Built in React. Part of a larger game design project documented at the [QA Portfolio](https://wendell91097.github.io/QA-Portfolio/).
+Narrative strategy game set in the 1800s American West. Built in React as a playable proof-of-concept of Ken Levine's [Narrative Legos](https://www.gdcvault.com/play/1020243/Narrative) design framework. Part of a larger game design project documented at the [QA Portfolio](https://wendell91097.github.io/QA-Portfolio/).
 
 ---
 
@@ -103,9 +103,23 @@ npm run dev
 
 ## Design Notes
 
-The design question this prototype answers: does the threshold system produce meaningful decisions? A tension between Stars that can't be resolved by optimizing all three simultaneously — where serving Esperanza's land interests obstructs Whitmore's corridor, backing Solomon's independence complicates the railroad's commercial ambitions, and the deferred consequences of early decisions keep arriving regardless of what you do next.
+Manifest is a direct implementation of Ken Levine's [Narrative Legos](https://www.gdcvault.com/play/1020243/Narrative) framework, presented at GDC. The core thesis: narrative doesn't lend itself to systems because traditional narrative is linear, but if you break it into its smallest non-abstract elements — Stars, Passions, transparent triggers — you can build a nearly infinite array of narrative outcomes from a limited set of parts.
 
-That's what this prototype is for.
+The framework maps onto Manifest like this:
+
+- **Stars and Passions** — Levine's Frank the Orc translated into Esperanza, Solomon, and Whitmore, each with a small set of motivations the player can act on or against
+- **Macropassion as aggregation** — a named relationship state derived from the average of all Passions, with behavioral thresholds rather than raw numbers
+- **Zero-sum tension** — Levine's Frank-and-Pete problem: two Stars who can't both be fully served, where the northern boundary dispute forces a direct confrontation between Esperanza's land claim and Whitmore's federal filing
+- **Transparency** — every effect surfaces a plain-language `why`, keeping triggers legible rather than opaque
+- **Hidden Passions** — Solomon's Brotherhood Passion (his search for his missing brother) is invisible until the relationship is deep enough to reveal it, exactly as Levine describes
+
+Deferred consequences — decisions planting Chronicle entries that fire years later — extend beyond the talk. Levine didn't address time-delayed outcomes; that's the original design contribution this prototype adds to the framework.
+
+Levine also left open the question of endpoints: when does the game end — when everything is destroyed, or everything is perfect? Manifest answers with the Ruin system: three distinct failure paths based on Infamy accumulation and Passion collapse, rather than a single win condition.
+
+The design question the prototype answers: does the threshold system produce meaningful tension? Can you build something where serving one person genuinely costs you with another — not as a stat penalty, but as a story?
+
+It does. That's what the prototype is for.
 
 The full design document is in the [QA Portfolio](https://wendell91097.github.io/QA-Portfolio/) under Game Concepts → GC-003.
 
