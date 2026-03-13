@@ -1813,7 +1813,7 @@ export default function ManifestGame() {
         />
       )}
 
-      <div style={{ background: '#0e0c07', height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: "'Courier Prime', monospace" }}>
+      <div style={{ background: '#0e0c07', height: '100vh', width: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Courier Prime', monospace" }}>
 
         {/* HEADER */}
         <div style={{ background: '#1a1408', borderBottom: '1px solid #2a2110', padding: '8px 18px', display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
