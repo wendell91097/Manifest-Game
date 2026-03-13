@@ -303,7 +303,8 @@ const ACTIONS = [
   {
     id: 'federal_claim', ya: 1811, source: 'whitmore', expires: 1812, msgType: 'Proposal',
     dispatch: "Co-Sign the Federal Route Claim with Whitmore",
-    desc: "Whitmore needs a local landowner's signature to give the federal filing credibility. Your name on this paper establishes the northern corridor as a federal zone and extinguishes prior claims within it. Solomon will see the filing. Esperanza will hear about it.",
+    desc: "Whitmore needs a local landowner's signature to give the federal filing credibility. Your name on this paper establishes the northern corridor as a federal zone and extinguishes prior claims within it. Esperanza will hear about it. Others in the valley will too.",
+    descRevealed: { star: 'solomon', text: "Whitmore needs a local landowner's signature to give the federal filing credibility. Your name on this paper establishes the northern corridor as a federal zone and extinguishes prior claims within it. Solomon will see the filing. Esperanza will hear about it." },
     result: "LOCAL SETTLER JOINS RAILROAD IN FEDERAL FILING — Northern route corridor claim submitted to Washington.",
     resultBody: "A joint claim establishing the northern survey corridor was submitted to the federal land office, co-signed by a valley landholder and J.T. Whitmore of Pacific Railroad. The filing extinguishes prior competing claims within the corridor. Solomon Reed declined to comment.",
     bodyHidden:  "A joint claim establishing the northern survey corridor was submitted to the federal land office, co-signed by a valley landholder and J.T. Whitmore of Pacific Railroad. The filing extinguishes prior competing claims within the corridor. At least one valley trader was reached for comment. He declined.",
@@ -1426,6 +1427,7 @@ function ActionCard({ act, stars, dispatch, revealed, isNew, year, season, anima
   const sourceLabel = sourceStar ? sourceStar.name.split(' ')[0] + ' ' + (sourceStar.name.split(' ').slice(1).join(' ') || '') : '—';
   const sourceColor = sourceStar?.color || T.inkDim;
   const msgType = act.msgType || 'Dispatch';
+  const descText = (act.descRevealed && revealed.includes(act.descRevealed.star)) ? act.descRevealed.text : act.desc;
 
   const expColor = seasonsLeft === null ? null : seasonsLeft <= 1 ? '#c03018' : seasonsLeft <= 2 ? '#c07020' : '#7a5030';
   const inactionNote = act.inaction ? 'Consequences follow inaction.' : 'This matter will pass without record.';
@@ -1478,7 +1480,7 @@ function ActionCard({ act, stars, dispatch, revealed, isNew, year, season, anima
 
         {!collapsed && (
           <div onClick={() => { if (!animating) dispatch({ type: 'ACT', id: act.id }); }} style={{ cursor: animating ? 'default' : 'pointer' }}>
-            <div style={{ fontSize: 10, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.55, marginBottom: 10 }}>{act.desc}</div>
+            <div style={{ fontSize: 10, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.55, marginBottom: 10 }}>{descText}</div>
             <div style={{ borderTop: `1px solid ${T.bdr}`, paddingTop: 8 }}>
               <div style={{ fontSize: 8, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6, fontFamily: "'Courier Prime', monospace" }}>Known Effects & Consequences</div>
               {act.effects.filter(e => revealed.includes(e.star) && isPassionVisible(stars, e.star, e.passion)).map((e, i, arr) => {
@@ -1721,6 +1723,34 @@ function HomesteadPanel({ homesteadLog }) {
   );
 }
 
+// ─── INTRO SCREEN ─────────────────────────────────────────────────────────────
+function IntroScreen({ onBegin, T }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 400, background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, fontFamily: "'Courier Prime', monospace" }}>
+      <div style={{ maxWidth: 520, width: '100%', textAlign: 'center' }}>
+        <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.3em', marginBottom: 20 }}>The Territorial Standard · Est. 1810</div>
+        <div style={{ fontSize: 11, color: T.inkFaint, fontFamily: "'Playfair Display', serif", fontStyle: 'italic', marginBottom: 16 }}>✦ ✦ ✦</div>
+        <div style={{ fontSize: 38, color: '#c9a14a', fontFamily: "'Playfair Display', serif", fontWeight: 900, letterSpacing: '0.06em', lineHeight: 1, marginBottom: 10 }}>MANIFEST</div>
+        <div style={{ fontSize: 9, color: T.inkMut, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.25em', marginBottom: 32 }}>California Territory · 1810</div>
+        <div style={{ fontSize: 11, color: T.inkMut, fontFamily: "'Playfair Display', serif", fontStyle: 'italic', lineHeight: 1.85, marginBottom: 12, borderTop: `1px solid ${T.bdr}`, borderBottom: `1px solid ${T.bdr}`, padding: '22px 0' }}>
+          You have arrived in the valley with land, some money, and a name not yet known.<br /><br />
+          Others have arrived before you. What you do here — and to whom — will determine whether you endure.
+        </div>
+        <div style={{ fontSize: 8, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.6, marginBottom: 32 }}>
+          Decisions accumulate. Some arrive as choices. Others arrive as consequences.
+        </div>
+        <button
+          onClick={onBegin}
+          style={{ background: 'transparent', border: `1px solid #c9a14a`, color: '#c9a14a', padding: '10px 32px', fontFamily: "'Courier Prime', monospace", fontSize: 10, cursor: 'pointer', letterSpacing: '0.18em', textTransform: 'uppercase', borderRadius: 2 }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#c9a14a'; e.currentTarget.style.color = T.bg; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#c9a14a'; }}>
+          Begin — 1810 →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── RUIN SCREEN ──────────────────────────────────────────────────────────────
 function RuinScreen({ state, dispatch }) {
   const T = useContext(ThemeCtx);
@@ -1795,6 +1825,7 @@ function HeaderMenu({ dispatch, darkMode, setDarkMode }) {
 export default function ManifestGame() {
   const [state, dispatch] = useReducer(reducer, INIT);
   const [darkMode, setDarkMode] = useState(true);
+  const [showIntro, setShowIntro] = useState(true);
   const T = mkT(darkMode);
   const [animating, setAnimating] = useState(false);
   const [animPhase, setAnimPhase]     = useState('idle');
@@ -1887,6 +1918,8 @@ export default function ManifestGame() {
         .star-card-enter { animation: slideInCard 0.5s ease-out forwards; }
         .action-card-new { animation: fadeInAction 0.4s ease-out forwards; }
       `}</style>
+
+      {showIntro && <IntroScreen onBegin={() => setShowIntro(false)} T={T} />}
 
       {state.ruined && <RuinScreen state={state} dispatch={dispatch} />}
       {state.pendingGuest && !state.ruined && (
