@@ -873,7 +873,12 @@ const GUESTS = [
         label: 'Grant Sanctuary',
         desc: 'You give him the barn and say nothing to the marshal in the morning.',
         homesteadNote: 'Sheltered a man traveling under another name. The marshal came at dawn and left without answers.',
-        effects: [],
+        effects: [
+          { star: 'esperanza', passion: 'trust',    delta: +8,  why: "You defied the federal marshal. That is the kind of action she has been watching for." },
+          { star: 'solomon',   passion: 'autonomy', delta: +8,  why: "You acted outside federal record and said nothing. He will hear about this." },
+          { star: 'solomon',   passion: 'caleb',    delta: +6,  why: "You sheltered a man crossing three territories to find his sister. He knows what that costs." },
+          { star: 'whitmore',  passion: 'control',  delta: -6,  why: "" },
+        ],
         fameEffects:   { esperanza: +4, solomon: +10, whitmore: 0 },
         infamyEffects: { esperanza: 0,  solomon: 0,  whitmore: +8 },
         logHeadline: 'MARSHAL REPORTS NO SIGN OF FUGITIVE — Continues north.',
@@ -885,7 +890,10 @@ const GUESTS = [
         label: 'Turn Him Away',
         desc: 'You tell him you cannot help. He rides into the dark.',
         homesteadNote: 'Turned away a man at dusk who asked for one night.',
-        effects: [],
+        effects: [
+          { star: 'solomon',   passion: 'autonomy', delta: -6,  why: "You turned away someone the network would have helped. He will file that." },
+          { star: 'esperanza', passion: 'trust',    delta: -4,  why: "You had a chance to act against the federal apparatus. You didn't." },
+        ],
         fameEffects:   { esperanza: 0, solomon: -8, whitmore: 0 },
         infamyEffects: { esperanza: 0, solomon: +5, whitmore: 0 },
         logHeadline: 'MARSHAL FINDS NO INTELLIGENCE AT CROSSROADS — Search continues.',
@@ -897,7 +905,12 @@ const GUESTS = [
         label: 'Report to the Marshal',
         desc: 'You tell the marshal which direction he rode. You know what follows from that.',
         homesteadNote: 'Gave the marshal the direction. Knew what it meant.',
-        effects: [],
+        effects: [
+          { star: 'solomon',   passion: 'autonomy', delta: -16, why: "You handed someone over to the federal apparatus. That is not a neutral act in his accounting." },
+          { star: 'solomon',   passion: 'caleb',    delta: -10, why: "You sent a man searching for his sister into custody. He knows what that means." },
+          { star: 'esperanza', passion: 'trust',    delta: -12, why: "You cooperated with federal authority against an outsider. She is taking notes." },
+          { star: 'whitmore',  passion: 'control',  delta: +8,  why: "You upheld the federal order when it cost you something. He respects that." },
+        ],
         fameEffects:   { esperanza: -8, solomon: -18, whitmore: +5 },
         infamyEffects: { esperanza: +6, solomon: +14, whitmore: 0 },
         logHeadline: 'COMANCHE MAN TAKEN INTO FEDERAL CUSTODY — Settler provides information leading to arrest.',
@@ -919,7 +932,11 @@ const GUESTS = [
         label: 'Open the Barn',
         desc: 'Two nights. You feed them, say nothing, and watch them go north.',
         homesteadNote: 'Isaiah Drum passed through with seven. Two nights. They went north.',
-        effects: [{ star: 'solomon', passion: 'autonomy', delta: +12, why: 'Word travels in the freedmen network. What you did here will be known to those who need to know it.' }],
+        effects: [
+          { star: 'solomon',   passion: 'autonomy', delta: +12, why: 'Word travels in the freedmen network. What you did here will be known to those who need to know it.' },
+          { star: 'esperanza', passion: 'trust',    delta: +7,  why: "" },
+          { star: 'whitmore',  passion: 'control',  delta: -8,  why: "" },
+        ],
         fameEffects:   { esperanza: +4, solomon: +20, whitmore: 0 },
         infamyEffects: { esperanza: 0,  solomon: 0,  whitmore: +14 },
         logHeadline: 'NO UNUSUAL REPORT — Crossroads quiet this week.',
@@ -931,7 +948,9 @@ const GUESTS = [
         label: 'Turn Them Away',
         desc: 'You tell him the risk is too great. He finds another way.',
         homesteadNote: 'Isaiah Drum came to the back door. You sent him on.',
-        effects: [],
+        effects: [
+          { star: 'solomon', passion: 'autonomy', delta: -8, why: "You turned away the freedmen network when it needed a door opened. He will hear about it." },
+        ],
         fameEffects:   { esperanza: 0, solomon: -14, whitmore: 0 },
         infamyEffects: { esperanza: 0, solomon: +8,  whitmore: 0 },
         logHeadline: 'NO REPORT — Crossroads quiet.',
@@ -953,7 +972,10 @@ const GUESTS = [
         label: 'Send Her the Long Way',
         desc: 'You describe the safer route clearly. Three extra days, but she arrives.',
         homesteadNote: 'Clara Finch stopped heading north. Sent her the long road. Heard later she made it.',
-        effects: [],
+        effects: [
+          { star: 'esperanza', passion: 'coalition', delta: +5, why: "The school she builds will serve Californio children too. What you enabled here has a longer reach than it looks." },
+          { star: 'solomon',   passion: 'roots',     delta: +4, why: "A settled, working valley is better for the post. You acted like someone who intends to stay." },
+        ],
         fameEffects:   { esperanza: +5, solomon: +5, whitmore: 0 },
         infamyEffects: { esperanza: 0,  solomon: 0,  whitmore: 0 },
         logHeadline: 'SCHOOLTEACHER ARRIVES AT NORTHGATE CAMP — Plans to open school in spring.',
@@ -965,7 +987,10 @@ const GUESTS = [
         label: 'Send Her the Fast Way',
         desc: 'You tell her the direct route is passable. You know it is not entirely safe.',
         homesteadNote: 'Sent Clara Finch the fast road. Did not tell her everything.',
-        effects: [],
+        effects: [
+          { star: 'esperanza', passion: 'trust',    delta: -8, why: "An Anglo settler deceived a woman who trusted him with her life. This is the pattern she has been describing." },
+          { star: 'solomon',   passion: 'roots',    delta: -4, why: "Death on the roads unsettles everything. The valley is harder to build in when it is that kind of place." },
+        ],
         fameEffects:   { esperanza: -6, solomon: -6, whitmore: 0 },
         infamyEffects: { esperanza: +6, solomon: +6, whitmore: 0 },
         logHeadline: 'WOMAN MISSING ON NORTHERN ROAD — Last seen at valley crossroads.',
@@ -1234,7 +1259,7 @@ function reducer(state, action) {
     pendingGuest = GUESTS.find(g => g.ya <= nextYear && g.expires > nextYear && !guestHistory.includes(g.id)) || null;
 
     const allAvailable = [...ACTIONS, ...UNLOCKABLE_ACTIONS.filter(a => state.unlockedActions.includes(a.id))]
-      .filter(a => !state.taken.includes(a.id) && (a.ya ?? 0) <= state.year && (!a.expires || a.expires > state.year))
+      .filter(a => !state.taken.includes(a.id) && (a.ya ?? 0) <= state.year && (!a.expires || a.expires > state.year) && !a.requiresPassionVisible)
       .map(a => a.id);
     const seenActions = [...new Set([...state.seenActions, ...allAvailable])];
 
@@ -1655,7 +1680,7 @@ const SEASON_VISUALS = {
 function ConvergenceModal({ event, stars, dispatch }) {
   const T = useContext(ThemeCtx);
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: T.modalBg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+    <div style={{ position: 'fixed', inset: 0, zoom: 0.75, zIndex: 200, background: T.modalBg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div style={{ maxWidth: 520, width: '100%', background: T.hdr, border: `1px solid ${T.bdrHi}`, borderTop: '3px solid #c9a14a', padding: '28px 28px 24px', animation: 'fadeInModal 0.45s ease-out forwards', boxShadow: '0 12px 48px rgba(0,0,0,0.4)' }}>
         <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 10 }}>Convergence — A Forced Choice</div>
         <div style={{ fontSize: 18, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.2, marginBottom: 14 }}>{event.headline}</div>
@@ -1670,11 +1695,29 @@ function ConvergenceModal({ event, stars, dispatch }) {
               <div style={{ fontSize: 11, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 700, lineHeight: 1.3, marginBottom: 5 }}>{choice.label}</div>
               <div style={{ fontSize: 9, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.5 }}>{choice.desc}</div>
               {choice.effects.filter(e => stars[e.star]).length > 0 && (
-                <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.bdr}`, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {choice.effects.map((e, i) => {
-                    const star = stars[e.star];
-                    if (!star) return null;
-                    return <span key={i} style={{ fontSize: 8, fontFamily: "'Courier Prime', monospace", color: e.delta > 0 ? '#4a8e42' : '#9a3020' }}>{star.name.split(' ')[0]} {e.delta > 0 ? '+' : ''}{e.delta}</span>;
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.bdr}`, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {Object.entries(
+                    choice.effects.reduce((acc, e) => {
+                      if (!stars[e.star]) return acc;
+                      if (!acc[e.star]) acc[e.star] = [];
+                      acc[e.star].push(e);
+                      return acc;
+                    }, {})
+                  ).map(([starId, effects]) => {
+                    const star = stars[starId];
+                    return (
+                      <div key={starId} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 4 }}>
+                        <span style={{ fontSize: 8, fontFamily: "'Courier Prime', monospace", color: star.color, fontWeight: 700 }}>{star.name.split(' ')[0]}:</span>
+                        {effects.map((e, i) => {
+                          const passion = star.passions[e.passion];
+                          return (
+                            <span key={i} style={{ fontSize: 8, fontFamily: "'Courier Prime', monospace", color: e.delta > 0 ? '#4a8e42' : '#9a3020' }}>
+                              {passion?.label || e.passion}{deltaSymbol(e.delta)}{i < effects.length - 1 ? ',' : ''}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    );
                   })}
                 </div>
               )}
@@ -1689,7 +1732,7 @@ function ConvergenceModal({ event, stars, dispatch }) {
 function GuestModal({ guest, dispatch }) {
   const T = useContext(ThemeCtx);
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: T.modalBg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+    <div style={{ position: 'fixed', inset: 0, zoom: 0.75, zIndex: 200, background: T.modalBg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div style={{ maxWidth: 520, width: '100%', background: T.hdr, border: `1px solid ${T.bdrHi}`, borderTop: `3px solid ${T.inkMut}`, padding: '28px 28px 24px', animation: 'fadeInModal 0.45s ease-out forwards', boxShadow: '0 12px 48px rgba(0,0,0,0.4)' }}>
         <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 6 }}>A Visitor at the Door</div>
         <div style={{ fontSize: 20, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.2, marginBottom: 4 }}>{guest.name}</div>
