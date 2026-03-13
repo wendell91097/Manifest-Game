@@ -299,6 +299,14 @@ const ACTIONS = [
         { star: 'solomon',   passion: 'autonomy', delta: -20, why: "The federal presence in the valley is now permanent." },
       ],
     },
+    inaction: {
+      headline: 'FEDERAL CORRIDOR FILING STALLS — Railroad unable to secure local co-signature for northern route claim.',
+      body: "Pacific Railroad's proposed federal filing for the northern corridor has been set aside for want of a credible local co-signatory. J.T. Whitmore has not commented publicly. The valley road is quiet, for now.",
+      effects: [
+        { star: 'whitmore',  passion: 'standing', delta: -8,  why: "He was sent here to secure local signatures. He did not." },
+        { star: 'esperanza', passion: 'trust',    delta: +6,  why: "You did not lend your name to the railroad's filing. She noticed the absence." },
+      ],
+    },
   },
   {
     id: 'lend_solomon', ya: 1812, source: 'solomon', msgType: 'Request',
@@ -347,6 +355,16 @@ const ACTIONS = [
       effects: [
         { star: 'whitmore',  passion: 'standing', delta: +25, why: "He won the case. The company made him a district supervisor." },
         { star: 'esperanza', passion: 'land',     delta: -30, why: "The ruling extinguishes the disputed parcels. She lost them in court, with your help." },
+      ],
+    },
+    inaction: {
+      headline: 'RAILROAD SURVEY CASE WEAKENED — Local witness declines to appear. Tribunal questions corridor claim.',
+      body: "Pacific Railroad's land tribunal case has been significantly weakened after an expected local witness did not appear to give testimony. J.T. Whitmore requested a continuance. The disputed parcels remain in question. The case continues without the corroboration he had anticipated.",
+      effects: [
+        { star: 'whitmore',  passion: 'standing', delta: -12, why: "The case faltered without the local witness he promised the company he could deliver." },
+        { star: 'whitmore',  passion: 'route',    delta: -8,  why: "The corridor claim is legally weakened without sworn corroboration." },
+        { star: 'esperanza', passion: 'land',     delta: +10, why: "The disputed parcels were not awarded. The threat recedes, for now." },
+        { star: 'esperanza', passion: 'trust',    delta: +8,  why: "You were asked to testify against her interests. You did not come." },
       ],
     },
   },
@@ -441,6 +459,15 @@ const ACTIONS = [
     fame:   { esperanza: +14, solomon: +6, whitmore: -12 },
     infamy: { esperanza:   0, solomon:  0, whitmore: +12 },
     def: null,
+    inaction: {
+      headline: 'RAILROAD SURVEY CREWS CONTINUE UNCHALLENGED ON VALLEJO PARCEL — No complaint filed. Work proceeds.',
+      body: "Pacific Railroad survey personnel have continued operations on the Vallejo parcel without formal challenge. Esperanza Vallejo had sought a trespass filing. None was made. Whitmore's crew finished the season's marking work before the first snow.",
+      effects: [
+        { star: 'esperanza', passion: 'trust',    delta: -12, why: "She came to you with a specific ask. You said nothing." },
+        { star: 'esperanza', passion: 'land',     delta: -8,  why: "No legal record of unauthorized entry. The crews continue." },
+        { star: 'whitmore',  passion: 'route',    delta: +6,  why: "Unchallenged survey progress. The season's marking work is complete." },
+      ],
+    },
   },
   {
     id: 'introduce_caleb', ya: 1819, source: 'solomon', msgType: 'Request',
@@ -488,6 +515,15 @@ const ACTIONS = [
         { star: 'esperanza', passion: 'land',      delta: +25, why: "Final appeal denial. The title is permanent." },
         { star: 'whitmore',  passion: 'route',     delta: -20, why: "The corridor's northern segment is now legally obstructed by an unassailable claim." },
         { star: 'esperanza', passion: 'coalition', delta: +18, why: "A won case is more valuable to the coalition than any amount of organizing." },
+      ],
+    },
+    inaction: {
+      headline: 'VALLEJO DEED REMAINS IN ESTATE LIMBO — Re-recording effort abandoned. Title legally vulnerable.',
+      body: "Efforts to re-record the Vallejo land grant under a living name have not proceeded. The title remains held under the original estate filing. Territorial law does not require the error to be corrected. Pacific Railroad's attorneys are aware of the situation.",
+      effects: [
+        { star: 'esperanza', passion: 'land',      delta: -15, why: "A title in estate limbo cannot actively defend itself in court. The vulnerability is known." },
+        { star: 'esperanza', passion: 'trust',     delta: -14, why: "She needed an intermediary. The law required one. You did not come." },
+        { star: 'esperanza', passion: 'coalition', delta: -8,  why: "The coalition needed a secured title as its legal anchor. It did not materialize." },
       ],
     },
   },
@@ -1079,6 +1115,25 @@ function reducer(state, action) {
       pendingGuest = null;
     }
 
+    // Inaction consequences — fire when an expiring action passes untaken
+    if (isWinter) {
+      const allKnownActions = [...ACTIONS, ...UNLOCKABLE_ACTIONS];
+      for (const act of allKnownActions) {
+        if (act.expires === nextYear && !state.taken.includes(act.id) && act.inaction) {
+          stars = applyE(stars, act.inaction.effects);
+          newEntries.push({
+            id: `inaction-${act.id}-${nextYear}`,
+            year: nextYear, season: 'Winter',
+            headline: act.inaction.headline,
+            body: act.inaction.body,
+            decision: `Inaction: "${act.dispatch}" — the window closed.`,
+            effects: act.inaction.effects,
+            isDeferred: false, isQuiet: false, isReactive: false, isDispatch: false, isInaction: true,
+          });
+        }
+      }
+    }
+
     // Deferred consequences — actions and echo dispatches
     for (const d of state.deferred) {
       if (isWinter && d.fireYear <= nextYear) {
@@ -1330,6 +1385,7 @@ function StarCard({ star }) {
 // ─── ACTION CARD ──────────────────────────────────────────────────────────────
 function ActionCard({ act, stars, dispatch, revealed, isNew, year, season }) {
   const [hov, setHov] = useState(false);
+  const [expTip, setExpTip] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const seasonsLeft = act.expires ? seasonsRemaining(year, season, act.expires) : null;
   const sourceStar = act.source ? stars[act.source] : null;
@@ -1337,11 +1393,16 @@ function ActionCard({ act, stars, dispatch, revealed, isNew, year, season }) {
   const sourceColor = sourceStar?.color || '#8a7040';
   const msgType = act.msgType || 'Dispatch';
 
+  const expColor = seasonsLeft === null ? null : seasonsLeft <= 1 ? '#c03018' : seasonsLeft <= 2 ? '#c07020' : '#7a5030';
+  const inactionNote = act.inaction
+    ? 'Consequences follow inaction.'
+    : 'This matter will pass without record.';
+
   return (
     <div
       className={isNew ? 'action-card-new' : ''}
       style={{ border: `1px solid ${hov ? '#453618' : '#2a2110'}`, background: hov ? '#1e1a09' : '#1a1508', borderRadius: 2, marginBottom: 14, transition: 'border-color 0.15s, background 0.15s', overflow: 'hidden' }}
-      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      onMouseEnter={() => setHov(true)} onMouseLeave={() => { setHov(false); setExpTip(false); }}
     >
       <div style={{ height: 2, background: `linear-gradient(90deg, ${sourceColor}22 0%, ${sourceColor} 100%)` }} />
       <div style={{ padding: '10px 12px 12px' }}>
@@ -1357,7 +1418,33 @@ function ActionCard({ act, stars, dispatch, revealed, isNew, year, season }) {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             {isNew && <div style={{ fontSize: 7, color: '#c9a14a', fontFamily: "'Courier Prime', monospace", letterSpacing: '0.15em', textTransform: 'uppercase' }}>New</div>}
-            {seasonsLeft !== null && <div style={{ fontSize: 7, color: seasonsLeft <= 2 ? '#c04020' : '#8a3818', fontFamily: "'Courier Prime', monospace", letterSpacing: '0.1em', textTransform: 'uppercase' }}>{seasonsLeft}s</div>}
+            {seasonsLeft !== null && (
+              <div
+                style={{ position: 'relative' }}
+                onMouseEnter={() => setExpTip(true)}
+                onMouseLeave={() => setExpTip(false)}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 3, cursor: 'default', padding: '1px 5px', border: `1px solid ${expColor}55`, borderRadius: 2, background: `${expColor}18` }}>
+                  <span style={{ fontSize: 9, color: expColor, lineHeight: 1 }}>⏱</span>
+                  <span style={{ fontSize: 7, color: expColor, fontFamily: "'Courier Prime', monospace", letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700 }}>{seasonsLeft}S</span>
+                </div>
+                {expTip && (
+                  <div style={{
+                    position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 100,
+                    background: '#1a1408', border: `1px solid ${expColor}66`, borderRadius: 2,
+                    padding: '7px 10px', width: 180, boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                    pointerEvents: 'none',
+                  }}>
+                    <div style={{ fontSize: 8, color: expColor, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 4, fontWeight: 700 }}>
+                      {seasonsLeft === 1 ? 'Final Season' : `Expires in ${seasonsLeft} seasons`}
+                    </div>
+                    <div style={{ fontSize: 8, color: '#8a7040', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.5 }}>
+                      {inactionNote}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             {/* Collapse toggle */}
             <button
               onClick={e => { e.stopPropagation(); setCollapsed(c => !c); }}
@@ -1461,6 +1548,37 @@ function LogEntry({ entry, stars, revealed, isNew }) {
         </div>
         <div style={{ fontSize: 13, color: '#d4c090', fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.25, marginBottom: 7, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{entry.headline}</div>
         <div style={{ fontSize: 10, color: '#8a7848', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.65 }}>{entry.body}</div>
+      </div>
+    </div>
+  );
+
+  // Inaction entry — muted rust, marks what did not happen
+  if (entry.isInaction) return (
+    <div style={{ borderBottom: '1px solid #2a2110', paddingBottom: 16, marginBottom: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <span style={{ fontSize: 9, color: '#7a4030' }}>◌</span>
+        <span style={{ fontSize: 8, color: '#7a4030', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.1em' }}>{entry.year}, {entry.season} — Window Closed</span>
+        {isNew && <span style={{ fontSize: 7, color: '#c9a14a', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.15em', marginLeft: 'auto' }}>● New</span>}
+      </div>
+      <div style={{ background: '#110a08', border: '1px solid #2a2110', borderLeft: '3px solid #7a4030', borderRadius: 2, padding: '10px 12px 12px' }}>
+        <div style={{ fontSize: 7, color: '#7a4030', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.18em', marginBottom: 5 }}>
+          ◌ No Action Taken
+        </div>
+        <div style={{ fontSize: 13, color: '#c09070', fontFamily: "'Playfair Display', serif", fontWeight: 700, lineHeight: 1.25, marginBottom: 7, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{entry.headline}</div>
+        <div style={{ fontSize: 10, color: '#7a6048', fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.65, marginBottom: entry.effects?.length ? 10 : 0 }}>{entry.body}</div>
+        {entry.effects?.filter(e => revealed.includes(e.star)).map((e, i) => {
+          const star = stars[e.star];
+          const passion = star?.passions[e.passion];
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4 }}>
+              <span style={{ color: star?.color, fontSize: 7 }}>◆</span>
+              <span style={{ fontFamily: "'Courier Prime', monospace", fontSize: 9 }}>
+                <span style={{ color: '#9a7858' }}>{star?.name?.split(' ')[0]} · </span>
+                <span style={{ color: e.delta > 0 ? '#4a8e42' : '#9a3020', fontWeight: 700 }}>{passion?.label}{deltaSymbol(e.delta)}</span>
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1813,7 +1931,7 @@ export default function ManifestGame() {
         />
       )}
 
-      <div style={{ background: '#0e0c07', height: '100vh', width: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Courier Prime', monospace" }}>
+      <div style={{ background: '#0e0c07', height: '100vh', display: 'flex', flexDirection: 'column', fontFamily: "'Courier Prime', monospace" }}>
 
         {/* HEADER */}
         <div style={{ background: '#1a1408', borderBottom: '1px solid #2a2110', padding: '8px 18px', display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
