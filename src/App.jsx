@@ -2606,6 +2606,8 @@ export default function ManifestGame() {
         }
         .star-card-enter { animation: slideInCard 0.5s ease-out forwards; }
         .action-card-new { animation: fadeInAction 0.4s ease-out forwards; }
+        html, body, #root { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+        *, *::before, *::after { box-sizing: border-box; }
       `}</style>
 
       {showIntro && <IntroScreen onBegin={() => setShowIntro(false)} T={T} />}
@@ -2626,7 +2628,7 @@ export default function ManifestGame() {
         />
       )}
 
-      <div style={{ background: T.bg, height: '100vh', width: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', fontFamily: "'Courier Prime', monospace", transition: 'background 0.35s' }}>
+      <div style={{ background: T.bg, height: '100%', width: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', fontFamily: "'Courier Prime', monospace", transition: 'background 0.35s' }}>
 
         {/* HEADER */}
         <div style={{ background: T.hdr, borderBottom: `1px solid ${T.bdr}`, padding: '8px 18px', display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
@@ -2674,17 +2676,17 @@ export default function ManifestGame() {
         </div>
 
         {/* BODY */}
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden', minHeight: 0 }}>
 
           {/* PERSONS */}
-          <div style={{ width: 248, borderRight: `1px solid ${T.bdr}`, padding: '14px 10px', overflowY: 'auto', flexShrink: 0, background: T.surf }}>
+          <div style={{ width: 248, borderRight: `1px solid ${T.bdr}`, padding: '14px 10px', overflowY: 'auto', flexShrink: 0, minHeight: 0, background: T.surf }}>
             <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 10, paddingBottom: 6, borderBottom: `1px solid ${T.bdr}` }}>Persons of Interest</div>
             {Object.values(state.stars).filter(s => revealed.includes(s.id)).map(s => <StarCard key={s.id} star={s} revealedPassions={state.revealedPassions} />)}
             <HomesteadPanel homesteadLog={state.homesteadLog} />
           </div>
 
           {/* DECISIONS */}
-          <div style={{ width: 320, borderRight: `1px solid ${T.bdr}`, overflowY: 'auto', flexShrink: 0, background: T.bg }}>
+          <div style={{ width: 320, borderRight: `1px solid ${T.bdr}`, overflowY: 'auto', flexShrink: 0, minHeight: 0, background: T.bg }}>
             <div style={{ padding: '14px 12px 8px', borderBottom: `1px solid ${T.bdr}` }}>
               <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.2em' }}>Matters Requiring Decision</div>
             </div>
@@ -2711,7 +2713,7 @@ export default function ManifestGame() {
           </div>
 
           {/* CHRONICLE */}
-          <div style={{ flex: 1, padding: '14px 20px', overflowY: 'auto', background: T.bg }}>
+          <div style={{ flex: 1, padding: '14px 20px', overflowY: 'auto', minHeight: 0, background: T.bg }}>
             <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 10, paddingBottom: 6, borderBottom: `1px solid ${T.bdr}` }}>The Territorial Standard — Chronicle</div>
             {state.log.length === 0 ? (
               <div style={{ fontSize: 13, color: T.inkMut, fontFamily: "'Playfair Display', serif", fontStyle: 'italic', lineHeight: 1.9 }}>
