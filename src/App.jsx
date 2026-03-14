@@ -1667,13 +1667,15 @@ function reducer(state, action) {
       }
     }
 
-    // Deferred consequences — actions and echo dispatches
+    // Deferred consequences — actions and echo dispatches.
+    // Fire on the Winter→Spring boundary; stamped as nextSeason (Spring) not 'Winter'
+    // so they group under the correct Chronicle season header.
     for (const d of state.deferred) {
       if (isWinter && d.fireYear <= nextYear) {
         if (!d.isDispatch) stars = applyE(stars, d.effects);
         newEntries.push(d.isDispatch
-          ? { id: `dispatch-${d.originYear}-${d.fireYear}-${Math.random().toString(36).slice(2,6)}`, year: nextYear, season: 'Winter', headline: d.headline, body: d.body, decision: null, effects: [], isDeferred: false, isQuiet: false, isReactive: false, isDispatch: true, dateline: d.dateline }
-          : { id: `def-${d.originYear}-${d.fireYear}-${Math.random().toString(36).slice(2,6)}`, year: nextYear, season: 'Winter', headline: d.headline, body: d.body, decision: `Consequence of: "${d.originLabel}" (${d.originYear})`, effects: d.effects, isDeferred: true, isQuiet: false, isReactive: false }
+          ? { id: `dispatch-${d.originYear}-${d.fireYear}-${Math.random().toString(36).slice(2,6)}`, year: nextYear, season: nextSeason, headline: d.headline, body: d.body, decision: null, effects: [], isDeferred: false, isQuiet: false, isReactive: false, isDispatch: true, dateline: d.dateline }
+          : { id: `def-${d.originYear}-${d.fireYear}-${Math.random().toString(36).slice(2,6)}`, year: nextYear, season: nextSeason, headline: d.headline, body: d.body, decision: `Consequence of: "${d.originLabel}" (${d.originYear})`, effects: d.effects, isDeferred: true, isQuiet: false, isReactive: false }
         );
       } else remaining.push(d);
     }
