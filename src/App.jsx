@@ -42,19 +42,23 @@ function mkT(dm) {
 // Fame and Infamy measure political/power relevance — not a permanent ledger,
 // but how much you currently register in each Star's world.
 //
-// Decay: both values degrade each season via  decay = DECAY_BASE * (1 - value/100).
-// High values decay slowly (entrenched notoriety has inertia); low values fade fast.
-// Any action that touches a Star's fame/infamy resets them back up the slow-decay zone.
+// Decay: tiered by current value so low scores persist long enough to matter.
+//   0–15:   2.00 points/season
+//   15–30:  1.25 points/season
+//   30–50:  0.75 points/season
+//   50–100: 0.50 points/season
+// Values are whole numbers; fractional decay rounds via Math.round() at application.
 //
 // Fame-as-buffer: a Star who has publicly vouched for you has skin in the game.
 // Ruin checks use the relative gap rule: ruin triggers when infamy ≥ 65 AND fame < infamy × FAME_BUFFER_RATIO.
 
-const DECAY_BASE        = 4;    // max points lost per season (at value 0)
 const FAME_BUFFER_RATIO = 0.80; // fame must be ≥ infamy × this to suppress ruin
 
 function decayRate(value) {
-  // Returns how many points value will fall this season.
-  return DECAY_BASE * (1 - value / 100);
+  if (value <= 15)  return 2.00;
+  if (value <= 30)  return 1.25;
+  if (value <= 50)  return 0.75;
+  return 0.50;
 }
 
 // Ruin is suppressed when fame ≥ infamy × FAME_BUFFER_RATIO.
@@ -327,7 +331,7 @@ const ACTIONS = [
     repBonus: [
       { star: 'esperanza', repState: 'HL', extraEffects: [{ star: 'esperanza', passion: 'coalition', delta: +8, why: "Your standing with the families gives the survey more legitimacy than the document alone would carry." }] },
     ],
-    fame:   { esperanza: +10, solomon: +5,  whitmore: -5  },
+    fame:   { esperanza: +10, solomon: +5,  whitmore:  0  },
     infamy: { esperanza:   0, solomon:  0,  whitmore: +5  },
     def: {
       years: 7,
@@ -372,8 +376,8 @@ const ACTIONS = [
       { star: 'esperanza', passion: 'trust',    delta: -10, why: "You socially sponsored the man whose surveys threaten her land. She does not separate the person from the instrument." },
       { star: 'solomon',   passion: 'autonomy', delta:  -6, why: "The railroad's man is now comfortable in the valley. Comfort has a way of becoming permanence." },
     ],
-    fame:   { esperanza: -6, solomon: -4, whitmore: +10 },
-    infamy: { esperanza: +8, solomon:  0, whitmore:   0 },
+    fame:   { esperanza:  0, solomon:  0, whitmore: +10 },
+    infamy: { esperanza: +8, solomon: +4, whitmore:   0 },
     def: null,
     inaction: {
       headline: "WHITMORE REMAINS OUTSIDE VALLEY CIRCLES — No introductions made. Railroad agent stays unknown.",
@@ -399,7 +403,7 @@ const ACTIONS = [
       { star: 'esperanza', passion: 'land',     delta: -10, why: "The corridor filing encroaches on the grant's northern boundary." },
       { star: 'whitmore',  passion: 'margaret', delta:  -5, why: "Helping the railroad is helping the machine. He is grateful but it deepens the trench." },
     ],
-    fame:   { esperanza: -5, solomon:  0, whitmore: +12 },
+    fame:   { esperanza:  0, solomon:  0, whitmore: +12 },
     infamy: { esperanza:  0, solomon: +8, whitmore:   0 },
     def: {
       years: 9,
@@ -431,6 +435,7 @@ const ACTIONS = [
       { star: 'solomon', passion: 'roots',    delta: +22, why: "The warehouse makes his presence in the valley harder to uproot." },
       { star: 'solomon', passion: 'autonomy', delta: +10, why: "A private loan with no federal strings is exactly the kind of help he can accept." },
       { star: 'solomon', passion: 'caleb',    delta:  +5, why: "A stable base gives Caleb somewhere to come back to." },
+      { star: 'esperanza', passion: 'coalition', delta: +5, why: "A strong independent post in the valley is a resource the coalition can use. She notices what you built." },
       { star: 'whitmore',passion: 'standing', delta:  -8, why: "A thriving independent post complicates the railroad's commercial ambitions in the valley." },
     ],
     fame:   { esperanza: +5, solomon: +14, whitmore:  0 },
@@ -463,8 +468,8 @@ const ACTIONS = [
     repBonus: [
       { star: 'whitmore', repState: 'HL', extraEffects: [{ star: 'whitmore', passion: 'standing', delta: +8, why: "Your existing reputation with the company amplifies the value of your word. He can point to a track record." }] },
     ],
-    fame:   { esperanza: -12, solomon: -6, whitmore: +16 },
-    infamy: { esperanza: +14, solomon:  0, whitmore:   0 },
+    fame:   { esperanza:   0, solomon:  0, whitmore: +16 },
+    infamy: { esperanza: +14, solomon: +6, whitmore:   0 },
     def: {
       years: 4,
       headline: 'TRIBUNAL VERDICT FINAL: RAILROAD PREVAILS — Settler testimony cited as decisive. Disputed parcels awarded.',
@@ -522,9 +527,8 @@ const ACTIONS = [
       { star: 'esperanza', passion: 'land',     delta: -22, why: "Valley water rights are inseparable from land security. You sold them." },
       { star: 'esperanza', passion: 'trust',    delta: -18, why: "You chose the railroad's money over the valley's water. In her accounting, that is definitive." },
       { star: 'solomon',   passion: 'roots',    delta: -15, why: "A valley without reliable water is a valley that cannot sustain what he has built." },
-      { star: 'whitmore',  passion: 'margaret', delta:  -8, why: "You helped him deliver the assignment. Neither of you spoke of what delivering it costs him." },
     ],
-    fame:   { esperanza: -14, solomon: -8, whitmore: +18 },
+    fame:   { esperanza:   0, solomon:  0, whitmore: +18 },
     infamy: { esperanza: +16, solomon: +8, whitmore:   0 },
     def: {
       years: 8,
@@ -545,12 +549,12 @@ const ACTIONS = [
     resultBody: "Representatives of the old Californio grant families convened this week at Reed's Trading Post on the valley road. Esperanza Vallejo chaired the session. J.T. Whitmore has filed a formal inquiry with the territorial office regarding the gathering.",
     effects: [
       { star: 'esperanza', passion: 'coalition', delta: +22, why: "A meeting that actually happened, in a safe venue, with the right families present." },
-      { star: 'esperanza', passion: 'trust',     delta: +10, why: "You created conditions for her community to organize. That counts." },
+      { star: 'esperanza', passion: 'trust',     delta: +10, why: "You chose coalition ground over railroad ground in a season when that choice was not free. She registers that." },
       { star: 'solomon',   passion: 'roots',     delta:  +8, why: "The post has become a place of consequence. He understands the value of that." },
       { star: 'solomon',   passion: 'autonomy',  delta: -15, why: "The political exposure you created will follow him. Whitmore filed an inquiry the same week." },
       { star: 'whitmore',  passion: 'corridor',  delta: -18, why: "A coordinated coalition is precisely what he was sent here to prevent." },
     ],
-    fame:   { esperanza: +12, solomon: +8, whitmore: -10 },
+    fame:   { esperanza: +12, solomon: +8, whitmore:   0 },
     infamy: { esperanza:   0, solomon:  0, whitmore: +10 },
     def: {
       years: 5,
@@ -575,7 +579,7 @@ const ACTIONS = [
       { star: 'whitmore',  passion: 'corridor', delta: -14, why: "The complaint delays survey work on the parcel." },
       { star: 'whitmore',  passion: 'standing', delta: -10, why: "His crew was named in a public filing. The company noticed." },
     ],
-    fame:   { esperanza: +14, solomon: +6, whitmore: -12 },
+    fame:   { esperanza: +14, solomon: +6, whitmore:   0 },
     infamy: { esperanza:   0, solomon:  0, whitmore: +12 },
     def: null,
     inaction: {
@@ -630,7 +634,7 @@ const ACTIONS = [
     repBonus: [
       { star: 'esperanza', repState: 'HH', extraEffects: [{ star: 'esperanza', passion: 'trust', delta: +10, why: "Given the complicated history between you, this action lands differently. She did not expect it and says so." }] },
     ],
-    fame:   { esperanza: +22, solomon: +6, whitmore: -16 },
+    fame:   { esperanza: +22, solomon: +6, whitmore:   0 },
     infamy: { esperanza:   0, solomon:  0, whitmore: +16 },
     def: {
       years: 6,
@@ -665,13 +669,13 @@ const ACTIONS = [
     result: "SETTLER FILES PUBLIC DECLARATION IN SUPPORT OF CALIFORNIO TITLES — Statement entered into territorial record.",
     resultBody: "A local landholder has filed a formal declaration with the territorial recorder affirming the legitimacy of Californio land grants under their original deeds. The statement names no specific properties but is understood to speak to the Vallejo parcel in particular. J.T. Whitmore has requested a copy. Esperanza Vallejo has not commented publicly.",
     effects: [
-      { star: 'esperanza', passion: 'trust',     delta: +22, why: "A public declaration is not the same as undoing the damage. But it is a formal record, and she knows the cost." },
+      { star: 'esperanza', passion: 'trust',     delta: +16, why: "A public declaration is not the same as undoing the damage. But it is a formal record, and she knows the cost." },
       { star: 'esperanza', passion: 'coalition', delta: +10, why: "The coalition treats a public Anglo declaration as a meaningful shift in the political landscape." },
       { star: 'whitmore',  passion: 'corridor',  delta: -14, why: "A declaration of this kind directly complicates the corridor's legal position." },
       { star: 'whitmore',  passion: 'standing',  delta:  -8, why: "The company will note your reversal. Whitmore answers for the people he recommended." },
     ],
-    fame:   { esperanza: +14, solomon: +6, whitmore: -10 },
-    infamy: { esperanza:  -8, solomon:  0, whitmore: +10 },
+    fame:   { esperanza: +14, solomon: +6, whitmore:   0 },
+    infamy: { esperanza:   0, solomon:  0, whitmore: +10 },
     def: null,
   },
   {
@@ -688,8 +692,8 @@ const ACTIONS = [
       { star: 'whitmore', passion: 'corridor', delta: -12, why: "Losing a co-filer complicates the corridor's commercial claims." },
       { star: 'whitmore', passion: 'standing', delta:  -8, why: "He vouched for you. Your reversal reflects on him. The company will notice." },
     ],
-    fame:   { esperanza: +6, solomon: +12, whitmore:  -8 },
-    infamy: { esperanza:  0, solomon:  -6, whitmore:  +8 },
+    fame:   { esperanza: +6, solomon: +12, whitmore:  0 },
+    infamy: { esperanza:  0, solomon:   0, whitmore: +8 },
     def: null,
   },
   {
@@ -705,7 +709,7 @@ const ACTIONS = [
       { star: 'esperanza', passion: 'trust',    delta: -16, why: "You handed Whitmore the evidence that protects the railroad. She knows what that means for the valley." },
       { star: 'esperanza', passion: 'land',     delta: -10, why: "A restored Whitmore is a more effective adversary against the grant." },
     ],
-    fame:   { esperanza: -8, solomon: 0, whitmore: +16 },
+    fame:   { esperanza:  0, solomon: 0, whitmore: +16 },
     infamy: { esperanza: +8, solomon: 0, whitmore:   0 },
     def: null,
   },
@@ -727,7 +731,7 @@ const ACTIONS = [
       { star: 'esperanza', passion: 'coalition', delta: -20, why: "Coalition members who learn how the records were used hold her responsible for the exposure." },
       { star: 'solomon',   passion: 'autonomy',  delta: -10, why: "Using someone's trust as a legal instrument without their knowledge is the kind of thing he files and doesn't forgive." },
     ],
-    fame:   { esperanza: -16, solomon: -8, whitmore: +6 },
+    fame:   { esperanza:  0, solomon:  0, whitmore: +6 },
     infamy: { esperanza: +20, solomon: +8, whitmore:  0 },
     def: null,
   },
@@ -743,7 +747,7 @@ const ACTIONS = [
       { star: 'solomon', passion: 'autonomy', delta: -20, why: "A private arrangement made public against his wishes is a violation he will not separate from the person who did it." },
       { star: 'solomon', passion: 'caleb',    delta: -10, why: "Caleb's future at the post is now entangled with a federal debt record he didn't choose." },
     ],
-    fame:   { esperanza: -6, solomon: -20, whitmore: +8 },
+    fame:   { esperanza:  0, solomon:   0, whitmore: +8 },
     infamy: { esperanza: +6, solomon: +22, whitmore:  0 },
     def: null,
   },
@@ -893,8 +897,8 @@ const REACTIVE_EVENTS = [
     effects: [
       { star: 'esperanza', passion: 'land', delta: +8, why: "Filing publicly shifts legal ground in her favor." },
     ],
-    fameEffects:   { esperanza: 0, solomon: 0, whitmore: 0 },
-    infamyEffects: { esperanza: +20, solomon: +5, whitmore: -5 },
+    fameEffects:   { esperanza: 0, solomon: 0, whitmore: +5 },
+    infamyEffects: { esperanza: +20, solomon: +5, whitmore:  0 },
     unlocksActions: [],
     isNegative: true,
   },
@@ -992,7 +996,7 @@ const UNLOCKABLE_ACTIONS = [
       { star: 'whitmore',  passion: 'corridor',  delta: -25, why: "Pre-annexation records are the most dangerous thing the railroad's surveyors can face." },
       { star: 'whitmore',  passion: 'standing',  delta: -12, why: "The company will hold him responsible for this exposure." },
     ],
-    fame:   { esperanza: +14, solomon: +5, whitmore: -18 },
+    fame:   { esperanza: +14, solomon: +5, whitmore:   0 },
     infamy: { esperanza:  0,  solomon:  0, whitmore: +18 },
     def: null,
   },
@@ -1007,10 +1011,10 @@ const UNLOCKABLE_ACTIONS = [
     effects: [
       { star: 'solomon',   passion: 'roots',    delta: +18, why: "Documents that legitimize Californio claims also protect his post's adjacent land." },
       { star: 'solomon',   passion: 'autonomy', delta: +10, why: "Information this valuable, obtained outside federal channels, is exactly what he values." },
-      { star: 'esperanza', passion: 'trust',    delta: +12, why: "You trusted her records to someone she hasn't fully vetted. She notices, ambivalently." },
+      { star: 'esperanza', passion: 'trust',    delta: -12, why: "You remind her that your motivations aren't always aligned." },
       { star: 'esperanza', passion: 'coalition',delta:  -8, why: "Coalition documents outside coalition control is not what she intended." },
     ],
-    fame:   { esperanza: +5, solomon: +14, whitmore: 0 },
+    fame:   { esperanza:  0, solomon: +14, whitmore: 0 },
     infamy: { esperanza: +5, solomon:   0, whitmore: 0 },
     def: null,
   },
@@ -1027,7 +1031,7 @@ const UNLOCKABLE_ACTIONS = [
       { star: 'solomon', passion: 'autonomy', delta: +15, why: "Operating outside federal record together creates a kind of trust that legal dealings cannot." },
       { star: 'whitmore', passion: 'standing', delta: -10, why: "Off-record commerce in his corridor is a problem he will eventually be held accountable for." },
     ],
-    fame:   { esperanza: +5, solomon: +16, whitmore: -8 },
+    fame:   { esperanza: +5, solomon: +16, whitmore:  0 },
     infamy: { esperanza:  0, solomon:   0, whitmore: +8 },
     def: null,
   },
@@ -1056,7 +1060,7 @@ const CONVERGENCE_EVENTS = [
           { star: 'whitmore',  passion: 'corridor', delta: -20, why: "The statement directly obstructs his filing." },
           { star: 'whitmore',  passion: 'standing', delta: -15, why: "Losing a local ally publicly is a failure the company will notice." },
         ],
-        fameEffects:   { esperanza: +18, solomon: +8, whitmore: -14 },
+        fameEffects:   { esperanza: +18, solomon: +8, whitmore:   0 },
         infamyEffects: { esperanza:   0, solomon:  0, whitmore: +14 },
       },
       {
@@ -1069,8 +1073,8 @@ const CONVERGENCE_EVENTS = [
           { star: 'esperanza', passion: 'trust',    delta: -28, why: "Direct opposition at the moment of confrontation. She will not forget." },
           { star: 'esperanza', passion: 'land',     delta: -18, why: "Your confirmation weakens the survey's legal position." },
         ],
-        fameEffects:   { esperanza: -16, solomon: -8, whitmore: +18 },
-        infamyEffects: { esperanza: +18, solomon:  0, whitmore:   0 },
+        fameEffects:   { esperanza:   0, solomon:  0, whitmore: +18 },
+        infamyEffects: { esperanza: +18, solomon: +8, whitmore:   0 },
       },
       {
         id: 'side_neither',
@@ -1080,8 +1084,8 @@ const CONVERGENCE_EVENTS = [
           { star: 'esperanza', passion: 'trust',    delta: -12, why: "Neutrality at the moment she needed support reads as abandonment." },
           { star: 'whitmore',  passion: 'standing', delta:  -8, why: "He expected you to deliver. You didn't show." },
         ],
-        fameEffects:   { esperanza: -8, solomon: 0, whitmore: -8 },
-        infamyEffects: { esperanza:  8, solomon: 0, whitmore:  8 },
+        fameEffects:   { esperanza:  0, solomon: 0, whitmore:  0 },
+        infamyEffects: { esperanza: +8, solomon: 0, whitmore: +8 },
       },
     ],
   },
@@ -1103,7 +1107,7 @@ const CONVERGENCE_EVENTS = [
           { star: 'solomon',   passion: 'roots',     delta: +12, why: "An alliance this useful makes the post harder to uproot." },
           { star: 'whitmore',  passion: 'corridor',  delta: -20, why: "A coordinated Californio-freedmen alliance is his worst outcome in this valley." },
         ],
-        fameEffects:   { esperanza: +12, solomon: +12, whitmore: -14 },
+        fameEffects:   { esperanza: +12, solomon: +12, whitmore:   0 },
         infamyEffects: { esperanza:   0, solomon:   0, whitmore: +14 },
       },
       {
@@ -1114,8 +1118,8 @@ const CONVERGENCE_EVENTS = [
           { star: 'esperanza', passion: 'trust',    delta: -14, why: "She suspects you had more influence over this than you let on." },
           { star: 'solomon',   passion: 'autonomy', delta:  -8, why: "A door you could have opened, you left closed. He files that." },
         ],
-        fameEffects:   { esperanza: -8, solomon: -8, whitmore: +5 },
-        infamyEffects: { esperanza:  8, solomon:  8, whitmore:  0 },
+        fameEffects:   { esperanza:  0, solomon:  0, whitmore: +5 },
+        infamyEffects: { esperanza: +8, solomon: +8, whitmore:  0 },
       },
     ],
   },
@@ -1148,8 +1152,8 @@ const CONVERGENCE_EVENTS = [
           { star: 'whitmore', passion: 'standing', delta:  +8, why: "He delivered again. The company pays attention to that." },
           { star: 'whitmore', passion: 'margaret', delta: -18, why: "You were part of why he chose the route over the letter. He knows it. So does she, eventually." },
         ],
-        fameEffects:   { esperanza: -4, solomon: -4, whitmore: +12 },
-        infamyEffects: { esperanza:  0, solomon:  0, whitmore:   0 },
+        fameEffects:   { esperanza:  0, solomon:  0, whitmore: +12 },
+        infamyEffects: { esperanza: +4, solomon: +4, whitmore:   0 },
       },
       {
         id: 'attempt_both',
@@ -1190,8 +1194,8 @@ const CONVERGENCE_EVENTS = [
               : "The filing went badly without you. His footing in the valley is less certain." },
           { star: 'whitmore',  passion: 'standing', delta: -12, why: "The lapsed corridor extension is a failure he has to explain to the company." },
         ],
-        fameEffects:   { esperanza: +16, solomon:  -8, whitmore: -10 },
-        infamyEffects: { esperanza:   0, solomon:  +6, whitmore: +10 },
+        fameEffects:   { esperanza: +16, solomon:   0, whitmore:   0 },
+        infamyEffects: { esperanza:   0, solomon:  +8, whitmore: +10 },
       },
       {
         id: 'answer_solomon',
@@ -1209,7 +1213,7 @@ const CONVERGENCE_EVENTS = [
           { star: 'esperanza', passion: 'trust',    delta: -16, why: "She had asked specifically for you. You sent word you couldn't come. She went alone." },
           { star: 'whitmore',  passion: 'standing', delta: -12, why: "The lapsed extension is another failure on his record with the company." },
         ],
-        fameEffects:   { esperanza: -10, solomon: +16, whitmore: -10 },
+        fameEffects:   { esperanza:   0, solomon: +16, whitmore:   0 },
         infamyEffects: { esperanza: +10, solomon:   0, whitmore: +10 },
       },
       {
@@ -1226,7 +1230,7 @@ const CONVERGENCE_EVENTS = [
               ? "The adverse ruling on his deed has put the warehouse in question. He knows where you were."
               : "The filing went against him. He knows where you were." },
         ],
-        fameEffects:   { esperanza: -12, solomon: -10, whitmore: +18 },
+        fameEffects:   { esperanza:   0, solomon:   0, whitmore: +18 },
         infamyEffects: { esperanza: +12, solomon: +10, whitmore:   0 },
       },
     ],
@@ -1272,8 +1276,8 @@ const GUESTS = [
           { star: 'solomon',   passion: 'autonomy', delta: -6,  why: "You turned away someone the network would have helped. He will file that." },
           { star: 'esperanza', passion: 'trust',    delta: -4,  why: "You had a chance to act against the federal apparatus. You didn't." },
         ],
-        fameEffects:   { esperanza: 0, solomon: -8, whitmore: 0 },
-        infamyEffects: { esperanza: 0, solomon: +5, whitmore: 0 },
+        fameEffects:   { esperanza: 0, solomon:  0, whitmore: 0 },
+        infamyEffects: { esperanza: 0, solomon: +8, whitmore: 0 },
         logHeadline: 'MARSHAL FINDS NO INTELLIGENCE AT CROSSROADS — Search continues.',
         logBody: 'The territorial marshal found no useful intelligence at the valley crossroads. He continued north. No further reports.',
         echoDef: null,
@@ -1287,10 +1291,11 @@ const GUESTS = [
           { star: 'solomon',   passion: 'autonomy', delta: -16, why: "You handed someone over to the federal apparatus. That is not a neutral act in his accounting." },
           { star: 'solomon',   passion: 'caleb',    delta: -10, why: "You sent a man searching for his sister into custody. He knows what that means." },
           { star: 'esperanza', passion: 'trust',    delta: -12, why: "You cooperated with federal authority against an outsider. She is taking notes." },
-          { star: 'whitmore',  passion: 'corridor', delta: +8,  why: "You upheld the federal order when it cost you something. He respects that." },
+          { star: 'whitmore',  passion: 'corridor', delta:  +8, why: "You upheld the federal order when it cost you something. He respects that." },
+          { star: 'whitmore',  passion: 'standing', delta:  +5, why: "A settler who cooperates with federal authority is a settler worth having. The company notices that kind of reliability." },
         ],
-        fameEffects:   { esperanza: -8, solomon: -18, whitmore: +5 },
-        infamyEffects: { esperanza: +6, solomon: +14, whitmore: 0 },
+        fameEffects:   { esperanza:  0, solomon:   0, whitmore: +5 },
+        infamyEffects: { esperanza: +8, solomon: +18, whitmore:  0 },
         logHeadline: 'COMANCHE MAN TAKEN INTO FEDERAL CUSTODY — Settler provides information leading to arrest.',
         logBody: 'A Comanche man traveling through the valley was taken into federal custody after a local settler provided the territorial marshal with directional intelligence. He was transported east. His sister\'s whereabouts remain unknown.',
         echoDef: { years: 3, dateline: 'Sacramento Union · California', headline: 'COMANCHE PRISONER DIES IN FEDERAL CUSTODY — No next of kin located.', body: 'A Comanche man held in federal custody since his arrest in the valley territories has died of illness at the territorial detention facility. His name, if it was ever recorded accurately, does not appear in the official ledger.' },
@@ -1312,6 +1317,7 @@ const GUESTS = [
         homesteadNote: 'Isaiah Drum passed through with seven. Two nights. They went north.',
         effects: [
           { star: 'solomon',   passion: 'autonomy', delta: +12, why: 'Word travels in the freedmen network. What you did here will be known to those who need to know it.' },
+          { star: 'solomon',   passion: 'roots',    delta:  +4, why: "A crossroads that shelters people the network trusts is a crossroads worth anchoring to." },
           { star: 'esperanza', passion: 'trust',    delta: +7,  why: "You opened your door against the federal order. That is the kind of thing that travels in the right channels." },
           { star: 'whitmore',  passion: 'corridor', delta: -8,  why: "A settler running an unsanctioned operation out of the crossroads is a problem the railroad will eventually have to account for." },
         ],
@@ -1329,8 +1335,8 @@ const GUESTS = [
         effects: [
           { star: 'solomon', passion: 'autonomy', delta: -8, why: "You turned away the freedmen network when it needed a door opened. He will hear about it." },
         ],
-        fameEffects:   { esperanza: 0, solomon: -14, whitmore: 0 },
-        infamyEffects: { esperanza: 0, solomon: +8,  whitmore: 0 },
+        fameEffects:   { esperanza: 0, solomon:   0, whitmore: 0 },
+        infamyEffects: { esperanza: 0, solomon: +14, whitmore: 0 },
         logHeadline: 'NO REPORT — Crossroads quiet.',
         logBody: 'Nothing of note was reported at the valley crossroads this week.',
         echoDef: null,
@@ -1369,7 +1375,7 @@ const GUESTS = [
           { star: 'esperanza', passion: 'trust',    delta: -8, why: "An Anglo settler deceived a woman who trusted him with her life. This is the pattern she has been describing." },
           { star: 'solomon',   passion: 'roots',    delta: -4, why: "Death on the roads unsettles everything. The valley is harder to build in when it is that kind of place." },
         ],
-        fameEffects:   { esperanza: -6, solomon: -6, whitmore: 0 },
+        fameEffects:   { esperanza:  0, solomon:  0, whitmore: 0 },
         infamyEffects: { esperanza: +6, solomon: +6, whitmore: 0 },
         logHeadline: 'WOMAN MISSING ON NORTHERN ROAD — Last seen at valley crossroads.',
         logBody: 'A schoolteacher reported heading to the northern mining camps has not arrived at her destination. The territorial office has been notified. A search is being organized.',
@@ -1554,7 +1560,6 @@ const INIT = {
   pendingChoices: [],  // convergence events awaiting player resolution — shown as modal stack
   unlockedActions: [], // action IDs unlocked by reactive events, added to available pool
   seenActions: [],     // action IDs that have appeared in Decisions (used for ● New badge)
-  seenStars: [],       // star IDs whose source actions have appeared (drives Persons reveal)
   revealedPassions: [],  // "starId:passionKey" strings permanently unlocked (hidden passions)
   pendingReveal: [],     // { key, year } objects queued for the PassionRevealModal
   pendingGuest: null,    // current GUESTS entry awaiting player response
@@ -1654,7 +1659,7 @@ function reducer(state, action) {
         if (state.taken.includes(act.id) || !act.inaction) continue;
         const seasonExpired = act.expiresSeason &&
           nextYear === act.expires &&
-          nextSeason === act.expiresSeason
+          nextSeason === act.expiresSeason;
         const yearExpired = !act.expiresSeason && isWinter && act.expires === nextYear;
         if (seasonExpired || yearExpired) {
           stars = applyE(stars, act.inaction.effects);
@@ -1754,10 +1759,6 @@ function reducer(state, action) {
         && (!a.requiresPassionAbove || (stars[a.requiresPassionAbove.star]?.passions[a.requiresPassionAbove.passion]?.value ?? 0) >= a.requiresPassionAbove.threshold))
       .map(a => a.id);
     const seenActions = [...new Set([...state.seenActions, ...allAvailable])];
-    const revealedStarIds = [...ACTIONS, ...UNLOCKABLE_ACTIONS.filter(a => state.unlockedActions.includes(a.id))]
-      .filter(a => (a.ya ?? 0) * 4 + (a.yaSeasonIdx ?? 0) <= cTick)
-      .map(a => a.source).filter(Boolean);
-    const seenStars = [...new Set([...state.seenStars, ...revealedStarIds])];
 
     const revealedPassions = checkPassionReveals(stars, state.revealedPassions);
     const newlyRevealed = revealedPassions.filter(k => !state.revealedPassions.includes(k));
@@ -2588,7 +2589,6 @@ export default function ManifestGame() {
     <>
       <style>{FONTS}</style>
       <style>{`
-        * { box-sizing: border-box; margin: 0; padding: 0; }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: ${T.scrollTrack}; }
         ::-webkit-scrollbar-thumb { background: ${T.scrollThumb}; border-radius: 2px; }

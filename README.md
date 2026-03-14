@@ -28,11 +28,11 @@ This is a prototype. It proves the threshold system works. The full scope — fi
 | Steadfast | 50 to 75 |
 | Trusted | 30 to 50 |
 | Favorable | 15 to 30 |
-| Neutral | -15 to 15 |
-| Strained | -30 to -15 |
-| Opposed | -50 to -30 |
-| Hostile | -75 to -50 |
-| Irreconcilable | -100 to -75 |
+| Neutral | 15 to -15 |
+| Strained | -15 to -30 |
+| Opposed | -30 to -50 |
+| Hostile | -50 to -75 |
+| Irreconcilable | -75 to -100 |
 
 Each band is a behavioral state, not a number. Crossing a threshold changes what that person does in the world — concretely, legibly, with downstream consequences. The overall relationship with each Star is a **Macropassion** label, derived from the average across all their Passions. Nine named states cover the full range:
 
@@ -67,7 +67,18 @@ Some actions only surface after prior damage or prior trust has been established
 ### Fame & Infamy
 Fame and Infamy don't accumulate permanently — they measure how much you currently matter to each Star's world. Both values are whole numbers between 0 and 100.
 
-**Decay.** Each season, both values fall at a rate inverse to their current level. Low values fade quickly; high values carry inertia and barely move. Going quiet with a Star is a viable survival strategy when Infamy is moderate, but once notoriety is entrenched it can no longer be waited out — decay slows almost to nothing, and you are forced to act rather than disappear.
+**Decay.** Each season, both values fall at a tiered rate based on their current level — lower values decay faster than higher ones, so a freshly earned score persists long enough to matter:
+
+| Value range | Decay per season |
+|---|---|
+| 0–15 | 2 points |
+| 15–30 | 1.25 points |
+| 30–50 | 0.75 points |
+| 50–100 | 0.5 points |
+
+Going quiet with a Star is a viable survival strategy when Infamy is moderate, but entrenched notoriety is slow to leave — a value above 50 takes over 20 seasons to fully decay without new actions driving it up.
+
+**Positive only.** Fame and Infamy are always additive — taking an action makes you more relevant to a Star, never less. Negative outcomes register as Infamy with the affected party rather than erasing Fame. The two values are independent: you can be simultaneously famous and notorious with the same person.
 
 **Compounding.** Gains scale logarithmically with your current level, following the same equal-ratio property as the Richter scale: each equal interval of value multiplies incoming gains by the same factor. At low values the modifier is nearly imperceptible — 20 Fame adds roughly 6% to further Fame gains. At high values the acceleration becomes significant — 80 Infamy adds roughly 59% to further Infamy gains, and 100 adds 100%. Early accumulation is relatively cheap; the upper range becomes self-reinforcing fast. Losses are never amplified; only gains compound.
 
