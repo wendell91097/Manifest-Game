@@ -1605,13 +1605,17 @@ function reducer(state, action) {
     const choice = conv?.choices.find(c => c.id === action.choiceId);
     if (!conv || !choice) return state;
     const prevStars = state.stars;
+    // Resolve labelFn/descFn — some choices (e.g. answer_solomon) use functions
+    // rather than static strings so the text varies based on prior actions taken.
+    const choiceLabel = typeof choice.labelFn === 'function' ? choice.labelFn(state.taken) : choice.label;
+    const choiceDesc  = typeof choice.descFn  === 'function' ? choice.descFn(state.taken)  : choice.desc;
     let stars = applyE(state.stars, choice.effects);
     stars = applyFI(stars, choice.fameEffects, choice.infamyEffects);
     const entry = {
       id: `conv-${action.eventId}-${action.choiceId}`,
       year: state.year, season: state.season,
-      headline: `${conv.headline} — ${choice.label}`,
-      body: choice.desc, decision: choice.label,
+      headline: `${conv.headline} — ${choiceLabel}`,
+      body: choiceDesc, decision: choiceLabel,
       effects: choice.effects, isDeferred: false, isQuiet: false, isReactive: true, isNegative: false,
     };
     const pending = state.pendingChoices.filter(p => p.id !== action.eventId);
@@ -2247,7 +2251,7 @@ function ConvergenceModal({ event, stars, dispatch }) {
   const T = useContext(ThemeCtx);
   return (
     <div style={{ position: 'fixed', inset: 0, zoom: 0.75, zIndex: 200, background: T.modalBg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style={{ maxWidth: 520, width: '100%', maxHeight: '90vh', overflowY: 'auto', background: T.hdr, border: `1px solid ${T.bdrHi}`, borderTop: '3px solid #c9a14a', padding: '28px 28px 24px', animation: 'fadeInModal 0.45s ease-out forwards', boxShadow: '0 12px 48px rgba(0,0,0,0.4)' }}>
+      <div style={{ maxWidth: 520, width: '100%', maxHeight: 'calc(70vh * 0.75)', overflowY: 'auto', background: T.hdr, border: `1px solid ${T.bdrHi}`, borderTop: '3px solid #c9a14a', padding: '28px 28px 24px', animation: 'fadeInModal 0.45s ease-out forwards', boxShadow: '0 12px 48px rgba(0,0,0,0.4)' }}>
         <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 10 }}>Convergence — A Forced Choice</div>
         <div style={{ fontSize: 18, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.2, marginBottom: 14 }}>{event.headline}</div>
         <div style={{ fontSize: 11, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.7, marginBottom: 22, borderBottom: `1px solid ${T.bdr}`, paddingBottom: 18 }}>{event.body}</div>
