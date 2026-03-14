@@ -2247,48 +2247,54 @@ function ConvergenceModal({ event, stars, dispatch }) {
   const T = useContext(ThemeCtx);
   return (
     <div style={{ position: 'fixed', inset: 0, zoom: 0.75, zIndex: 200, background: T.modalBg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style={{ maxWidth: 520, width: '100%', background: T.hdr, border: `1px solid ${T.bdrHi}`, borderTop: '3px solid #c9a14a', padding: '28px 28px 24px', animation: 'fadeInModal 0.45s ease-out forwards', boxShadow: '0 12px 48px rgba(0,0,0,0.4)' }}>
-        <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 10 }}>Convergence — A Forced Choice</div>
-        <div style={{ fontSize: 18, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.2, marginBottom: 14 }}>{event.headline}</div>
-        <div style={{ fontSize: 11, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.7, marginBottom: 22, borderBottom: `1px solid ${T.bdr}`, paddingBottom: 18 }}>{event.body}</div>
-        <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 10 }}>How do you stand?</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {event.choices.map(choice => (
-            <button key={choice.id} onClick={() => dispatch({ type: 'CHOOSE', eventId: event.id, choiceId: choice.id })}
-              style={{ background: 'transparent', border: `1px solid ${T.bdr}`, padding: '12px 14px', textAlign: 'left', cursor: 'pointer', borderRadius: 2, transition: 'border-color 0.15s, background 0.15s' }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = '#c9a14a'; e.currentTarget.style.background = T.cardHov; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = T.bdr; e.currentTarget.style.background = 'transparent'; }}>
-              <div style={{ fontSize: 11, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 700, lineHeight: 1.3, marginBottom: 5 }}>{choice.label}</div>
-              <div style={{ fontSize: 9, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.5 }}>{choice.desc}</div>
-              {choice.effects.filter(e => stars[e.star]).length > 0 && (
-                <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.bdr}`, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {Object.entries(
-                    choice.effects.reduce((acc, e) => {
-                      if (!stars[e.star]) return acc;
-                      if (!acc[e.star]) acc[e.star] = [];
-                      acc[e.star].push(e);
-                      return acc;
-                    }, {})
-                  ).map(([starId, effects]) => {
-                    const star = stars[starId];
-                    return (
-                      <div key={starId} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 4 }}>
-                        <span style={{ fontSize: 8, fontFamily: "'Courier Prime', monospace", color: star.color, fontWeight: 700 }}>{star.name.split(' ')[0]}:</span>
-                        {effects.map((e, i) => {
-                          const passion = star.passions[e.passion];
-                          return (
-                            <span key={i} style={{ fontSize: 8, fontFamily: "'Courier Prime', monospace", color: e.delta > 0 ? '#4a8e42' : '#9a3020' }}>
-                              {passion?.label || e.passion}{deltaSymbol(e.delta)}{i < effects.length - 1 ? ',' : ''}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </button>
-          ))}
+      <div style={{ maxWidth: 520, width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column', background: T.hdr, border: `1px solid ${T.bdrHi}`, borderTop: '3px solid #c9a14a', animation: 'fadeInModal 0.45s ease-out forwards', boxShadow: '0 12px 48px rgba(0,0,0,0.4)' }}>
+        {/* Pinned header */}
+        <div style={{ padding: '28px 28px 0', flexShrink: 0 }}>
+          <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.2em', marginBottom: 10 }}>Convergence — A Forced Choice</div>
+          <div style={{ fontSize: 18, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.2, marginBottom: 14 }}>{event.headline}</div>
+          <div style={{ fontSize: 11, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.7, marginBottom: 22, borderBottom: `1px solid ${T.bdr}`, paddingBottom: 18 }}>{event.body}</div>
+          <div style={{ fontSize: 7, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 10 }}>How do you stand?</div>
+        </div>
+        {/* Scrollable choices */}
+        <div style={{ overflowY: 'auto', padding: '0 28px 24px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {event.choices.map(choice => (
+              <button key={choice.id} onClick={() => dispatch({ type: 'CHOOSE', eventId: event.id, choiceId: choice.id })}
+                style={{ background: 'transparent', border: `1px solid ${T.bdr}`, padding: '12px 14px', textAlign: 'left', cursor: 'pointer', borderRadius: 2, transition: 'border-color 0.15s, background 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#c9a14a'; e.currentTarget.style.background = T.cardHov; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = T.bdr; e.currentTarget.style.background = 'transparent'; }}>
+                <div style={{ fontSize: 11, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 700, lineHeight: 1.3, marginBottom: 5 }}>{choice.label}</div>
+                <div style={{ fontSize: 9, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.5 }}>{choice.desc}</div>
+                {choice.effects.filter(e => stars[e.star]).length > 0 && (
+                  <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${T.bdr}`, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {Object.entries(
+                      choice.effects.reduce((acc, e) => {
+                        if (!stars[e.star]) return acc;
+                        if (!acc[e.star]) acc[e.star] = [];
+                        acc[e.star].push(e);
+                        return acc;
+                      }, {})
+                    ).map(([starId, effects]) => {
+                      const star = stars[starId];
+                      return (
+                        <div key={starId} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 4 }}>
+                          <span style={{ fontSize: 8, fontFamily: "'Courier Prime', monospace", color: star.color, fontWeight: 700 }}>{star.name.split(' ')[0]}:</span>
+                          {effects.map((e, i) => {
+                            const passion = star.passions[e.passion];
+                            return (
+                              <span key={i} style={{ fontSize: 8, fontFamily: "'Courier Prime', monospace", color: e.delta > 0 ? '#4a8e42' : '#9a3020' }}>
+                                {passion?.label || e.passion}{deltaSymbol(e.delta)}{i < effects.length - 1 ? ',' : ''}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>
