@@ -3,6 +3,16 @@ import { useState, useReducer, useRef, useEffect, createContext, useContext } fr
 const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap');`;
 
 // ─── THEME ───────────────────────────────────────────────────────────────────
+// mkT(darkMode) returns a token object consumed via ThemeCtx throughout all
+// components. Two palettes: dark (charred parchment) and light (aged newsprint).
+// Token naming convention:
+//   bg/surf/card/hdr       — surface layers, darkest → lightest
+//   cardHov/cardSub        — hover and nested card variants
+//   bdr/bdrHi/bdrSub       — border intensities
+//   ink/inkMid/inkMut/inkDim/inkFaint/inkWhy  — text hierarchy
+//   dispInk/dispFaint      — dispatch/newspaper card text (inverted in dark mode)
+//   modalBg                — semi-opaque modal overlay
+//   defBg/reactBg/newBg/inactBg/ruinBg/ruinCardBg — entry-type tint layers
 const ThemeCtx = createContext({});
 
 function mkT(dm) {
@@ -832,6 +842,43 @@ function repStateKey(star) {
   return fH && iH ? 'HH' : fH ? 'HL' : iH ? 'LH' : 'LL';
 }
 
+// ─── PASSION REVEAL DIALOGUES ─────────────────────────────────────────────────
+// Shown once when a hidden passion first becomes visible (pendingReveal queue).
+// body() receives the reveal year so duration language is accurate at any point
+// in the timeline — both anchors are fixed historical events:
+//   solomon:caleb     — Caleb left for Nevada in 1809
+//   whitmore:margaret — Whitmore arrived in the valley in 1811
+function yearsWord(n) {
+  const words = ['one','two','three','four','five','six','seven','eight','nine','ten'];
+  return n >= 1 && n <= 10 ? words[n - 1] : `${n}`;
+}
+
+const PASSION_REVEAL_DIALOGUES = {
+  'solomon:caleb': {
+    starName:     'Solomon Reed',
+    starColor:    '#5a8e52',
+    passionLabel: 'Brotherhood',
+    headline:     'He mentions his brother.',
+    body: (year) => {
+      const n = year - 1809;
+      return `It comes out sideways, the way things do with Solomon. Not a confession — more like a word that slips through a door he forgot to close. His brother Caleb went to Nevada for the silver rush ${yearsWord(n)} ${n === 1 ? 'year' : 'years'} ago and hasn't written since. He says it the way a man says something he has said to himself so many times it has lost its weight. You understand that it hasn't.`;
+    },
+    continueLabel: 'Acknowledge his silence',
+  },
+  'whitmore:margaret': {
+    starName:     'J.T. Whitmore',
+    starColor:    '#3e6e9a',
+    passionLabel: 'The Distance',
+    headline:     'He mentions his wife.',
+    body: (year) => {
+      const n = year - 1811;
+      const duration = n <= 1 ? 'over a year' : `${yearsWord(n)} years`;
+      return `He says her name — Margaret — once, in the middle of talking about something else, and then continues as if he hadn't. She is in Cincinnati. He has been in this valley for ${duration}. You have never heard him mention her before. The survey maps on his desk are dated. Her name is not on any of them.`;
+    },
+    continueLabel: 'More problems to consider',
+  },
+};
+
 // ─── REACTIVE EVENTS ─────────────────────────────────────────────────────────
 // Fire automatically when a passion crosses a threshold.
 // direction: 'above' fires when value rises past threshold, 'below' when it falls past.
@@ -1499,10 +1546,20 @@ function checkEvents(state, prevStars, newLog) {
 
 const INIT = {
   year: 1810, season: 'Spring', quietCount: 0,
-  stars: INITIAL_STARS, taken: [], log: [], deferred: [],
-  firedEvents: [], pendingChoices: [], unlockedActions: [], seenActions: [], seenStars: [],
-  revealedPassions: [],
-  pendingGuest: null, guestHistory: [], homesteadLog: [],
+  stars: INITIAL_STARS,
+  taken: [],           // action IDs the player has completed
+  log: [],             // Chronicle entries, newest first
+  deferred: [],        // queued future Chronicle entries { fireYear, headline, body, effects, ... }
+  firedEvents: [],     // reactive + convergence event IDs already triggered (dedupe guard)
+  pendingChoices: [],  // convergence events awaiting player resolution — shown as modal stack
+  unlockedActions: [], // action IDs unlocked by reactive events, added to available pool
+  seenActions: [],     // action IDs that have appeared in Decisions (used for ● New badge)
+  seenStars: [],       // star IDs whose source actions have appeared (drives Persons reveal)
+  revealedPassions: [],  // "starId:passionKey" strings permanently unlocked (hidden passions)
+  pendingReveal: [],     // { key, year } objects queued for the PassionRevealModal
+  pendingGuest: null,    // current GUESTS entry awaiting player response
+  guestHistory: [],      // guest IDs already answered or departed unanswered
+  homesteadLog: [],      // Crossroads ledger entries { year, season, note }
   ruined: false, ruinHeadline: null, ruinReason: null,
 };
 
@@ -1535,7 +1592,12 @@ function reducer(state, action) {
     const deferred = [...state.deferred];
     if (act.def) deferred.push({ fireYear: state.year + act.def.years, headline: act.def.headline, body: act.def.body, effects: act.def.effects, originLabel: act.dispatch, originYear: state.year });
     const revealedPassions = checkPassionReveals(stars, state.revealedPassions);
-    const next = { ...state, stars, taken: [...state.taken, act.id], deferred, revealedPassions };
+    // Diff before/after to find newly crossed hidden passion thresholds.
+    // Each newly revealed key is stamped with the current year so PassionRevealModal
+    // can render accurate duration text, then queued for sequential display.
+    const newlyRevealed = revealedPassions.filter(k => !state.revealedPassions.includes(k));
+    const pendingReveal = [...state.pendingReveal, ...newlyRevealed.map(k => ({ key: k, year: state.year }))];
+    const next = { ...state, stars, taken: [...state.taken, act.id], deferred, revealedPassions, pendingReveal };
     return checkRuin(checkEvents({ ...next, log: [entry, ...state.log] }, prevStars, []));
   }
   if (action.type === 'CHOOSE') {
@@ -1554,7 +1616,9 @@ function reducer(state, action) {
     };
     const pending = state.pendingChoices.filter(p => p.id !== action.eventId);
     const revealedPassions = checkPassionReveals(stars, state.revealedPassions);
-    const next = { ...state, stars, pendingChoices: pending, revealedPassions };
+    const newlyRevealed = revealedPassions.filter(k => !state.revealedPassions.includes(k));
+    const pendingReveal = [...state.pendingReveal, ...newlyRevealed.map(k => ({ key: k, year: state.year }))];
+    const next = { ...state, stars, pendingChoices: pending, revealedPassions, pendingReveal };
     return checkRuin(checkEvents({ ...next, log: [entry, ...state.log] }, prevStars, []));
   }
   if (action.type === 'ADVANCE') {
@@ -1585,13 +1649,13 @@ function reducer(state, action) {
       for (const act of allKnownActions) {
         if (state.taken.includes(act.id) || !act.inaction) continue;
         const seasonExpired = act.expiresSeason &&
-          act.expires === nextYear &&
-          SEASON_IDX[nextSeason] >= SEASON_IDX[act.expiresSeason];
+          nextYear === act.expires &&
+          nextSeason === act.expiresSeason
         const yearExpired = !act.expiresSeason && isWinter && act.expires === nextYear;
         if (seasonExpired || yearExpired) {
           stars = applyE(stars, act.inaction.effects);
           newEntries.push({
-            id: `inaction-${act.id}-${nextYear}`,
+            id: `inaction-${act.id}-${nextYear}-${nextSeason}`,
             year: nextYear, season: nextSeason,
             headline: act.inaction.headline,
             body: act.inaction.body,
@@ -1690,7 +1754,9 @@ function reducer(state, action) {
     const seenStars = [...new Set([...state.seenStars, ...revealedStarIds])];
 
     const revealedPassions = checkPassionReveals(stars, state.revealedPassions);
-    const next = { ...state, year: nextYear, season: nextSeason, stars, deferred: remaining, quietCount: state.quietCount + (quietEntry ? 1 : 0), seenActions, pendingGuest, guestHistory, homesteadLog, firedEvents: updatedFiredEvents, revealedPassions };
+    const newlyRevealed = revealedPassions.filter(k => !state.revealedPassions.includes(k));
+    const pendingReveal = [...state.pendingReveal, ...newlyRevealed.map(k => ({ key: k, year: state.year }))];
+    const next = { ...state, year: nextYear, season: nextSeason, stars, deferred: remaining, quietCount: state.quietCount + (quietEntry ? 1 : 0), seenActions, pendingGuest, guestHistory, homesteadLog, firedEvents: updatedFiredEvents, revealedPassions, pendingReveal };
     return checkRuin(checkEvents({ ...next, log: [...newEntries, ...(quietEntry ? [quietEntry] : []), ...state.log] }, prevStars, []));
   }
   if (action.type === 'GUEST_CHOOSE') {
@@ -1713,8 +1779,13 @@ function reducer(state, action) {
       deferred.push({ fireYear: state.year + choice.echoDef.years, headline: choice.echoDef.headline, body: choice.echoDef.body, effects: [], originLabel: `${guest.name}: ${choice.label}`, originYear: state.year, isDispatch: true, dateline: choice.echoDef.dateline });
     }
     const revealedPassions = checkPassionReveals(stars, state.revealedPassions);
-    const next = { ...state, stars, pendingGuest: null, guestHistory: [...state.guestHistory, action.guestId], homesteadLog, deferred, revealedPassions };
+    const newlyRevealed = revealedPassions.filter(k => !state.revealedPassions.includes(k));
+    const pendingReveal = [...state.pendingReveal, ...newlyRevealed.map(k => ({ key: k, year: state.year }))];
+    const next = { ...state, stars, pendingGuest: null, guestHistory: [...state.guestHistory, action.guestId], homesteadLog, deferred, revealedPassions, pendingReveal };
     return checkRuin(checkEvents({ ...next, log: [entry, ...state.log] }, prevStars, []));
+  }
+  if (action.type === 'DISMISS_REVEAL') {
+    return { ...state, pendingReveal: state.pendingReveal.slice(1) };
   }
   if (action.type === 'RESET') return INIT;
   return state;
@@ -2046,11 +2117,11 @@ function ActionCard({ act, stars, dispatch, revealed, revealedPassions, isNew, y
 }
 
 // ─── LOG ENTRY ────────────────────────────────────────────────────────────────
-function LogEntry({ entry, stars, revealed, revealedPassions, isNew }) {
+function LogEntry({ entry, stars, revealed, revealedPassions, isNew, hideDate = false }) {
   const T = useContext(ThemeCtx);
   if (entry.isQuiet) return (
     <div style={{ borderBottom: `1px solid ${T.bdr}`, paddingBottom: 12, marginBottom: 12, opacity: 0.45 }}>
-      <div style={{ fontSize: 8, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>{entry.year}, {entry.season}</div>
+      {!hideDate && <div style={{ fontSize: 8, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>{entry.year}, {entry.season}</div>}
       <div style={{ fontSize: 10, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.5 }}>— {entry.headline} —</div>
       <div style={{ fontSize: 10, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.65, marginTop: 4 }}>{entry.body}</div>
     </div>
@@ -2066,10 +2137,6 @@ function LogEntry({ entry, stars, revealed, revealedPassions, isNew }) {
 
   if (entry.isDispatch) return (
     <div style={{ borderBottom: `1px solid ${T.bdr}`, paddingBottom: 16, marginBottom: 18 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <span style={{ fontSize: 7, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.1em' }}>{entry.year}, {entry.season}</span>
-        {isNew && <span style={{ fontSize: 7, color: '#c9a14a', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.15em', marginLeft: 'auto' }}>● New</span>}
-      </div>
       <div style={{ background: T.surf, border: `1px solid ${T.bdr}`, borderLeft: `3px solid ${T.bdrHi}`, borderRadius: 2, padding: '10px 12px 12px' }}>
         <div style={{ fontSize: 7, color: T.inkFaint, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.18em', marginBottom: 6, borderBottom: `1px solid ${T.bdr}`, paddingBottom: 5 }}>
           ✦ {entry.dateline || 'The Territorial Standard'}
@@ -2082,13 +2149,15 @@ function LogEntry({ entry, stars, revealed, revealedPassions, isNew }) {
 
   if (entry.isInaction) return (
     <div style={{ borderBottom: `1px solid ${T.bdr}`, paddingBottom: 16, marginBottom: 18 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <span style={{ fontSize: 9, color: '#7a4030' }}>◌</span>
-        <span style={{ fontSize: 8, color: '#7a4030', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.1em' }}>{entry.year}, {entry.season} — Window Closed</span>
-        {isNew && <span style={{ fontSize: 7, color: '#c9a14a', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.15em', marginLeft: 'auto' }}>● New</span>}
-      </div>
+      {!hideDate && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <span style={{ fontSize: 9, color: '#7a4030' }}>◌</span>
+          <span style={{ fontSize: 8, color: '#7a4030', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.1em' }}>{entry.year}, {entry.season} — Window Closed</span>
+          {isNew && <span style={{ fontSize: 7, color: '#c9a14a', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.15em', marginLeft: 'auto' }}>● New</span>}
+        </div>
+      )}
       <div style={{ background: T.inactBg, border: `1px solid ${T.bdr}`, borderLeft: '3px solid #7a4030', borderRadius: 2, padding: '10px 12px 12px' }}>
-        <div style={{ fontSize: 7, color: '#7a4030', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.18em', marginBottom: 5 }}>◌ No Action Taken</div>
+        <div style={{ fontSize: 7, color: '#7a4030', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.18em', marginBottom: 5 }}>◌ Window Closed — No Action Taken</div>
         <div style={{ fontSize: 13, color: T.inkMut, fontFamily: "'Playfair Display', serif", fontWeight: 700, lineHeight: 1.25, marginBottom: 7, textTransform: 'uppercase', letterSpacing: '0.02em' }}>{entry.headline}</div>
         <div style={{ fontSize: 10, color: T.inkWhy, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.65, marginBottom: entry.effects?.length ? 10 : 0 }}>{entry.body}</div>
         {entry.effects?.filter(e => revealed.includes(e.star)).map((e, i) => {
@@ -2117,16 +2186,21 @@ function LogEntry({ entry, stars, revealed, revealedPassions, isNew }) {
   const accentColor = D ? '#8a1818' : R ? '#6a4a9a' : isNew ? '#c9a14a' : null;
   const bgColor     = D ? T.defBg   : R ? T.reactBg : isNew ? T.newBg  : 'transparent';
   const borderColor = D ? '#501010' : R ? '#3a2060' : isNew ? T.bdrHi  : T.bdr;
+  // showHeaderRow: always show the icon row for deferred (⚡) and reactive (◈) entries
+  // so their type indicators are never hidden even when the date is suppressed by hideDate.
+  const showHeaderRow = !hideDate || D || R;
   return (
     <div style={{ borderBottom: `1px solid ${borderColor}`, marginBottom: 18, background: bgColor, borderLeft: accentColor ? `3px solid ${accentColor}` : 'none', padding: (accentColor || isNew) ? '12px 14px 14px' : '0 0 16px 0', borderRadius: (accentColor || isNew) ? 2 : 0 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-        {D && <span style={{ fontSize: 12, color: '#8a1818' }}>⚡</span>}
-        {R && <span style={{ fontSize: 10, color: '#6a4a9a' }}>◈</span>}
-        <span style={{ fontSize: 8, color: T.inkMut, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.1em' }}>{entry.year}, {entry.season}</span>
-        {R && <span style={{ fontSize: 7, color: '#6a4a9a', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.15em' }}>— Narrative Event</span>}
-        {isNew && !D && !R && <span style={{ fontSize: 7, color: '#c9a14a', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.15em', marginLeft: 'auto' }}>● New</span>}
-      </div>
-      <div style={{ height: '0.5px', background: borderColor, marginBottom: 8 }} />
+      {showHeaderRow && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+          {D && <span style={{ fontSize: 12, color: '#8a1818' }}>⚡</span>}
+          {R && <span style={{ fontSize: 10, color: '#6a4a9a' }}>◈</span>}
+          {!hideDate && <span style={{ fontSize: 8, color: T.inkMut, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.1em' }}>{entry.year}, {entry.season}</span>}
+          {R && <span style={{ fontSize: 7, color: '#6a4a9a', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.15em' }}>— Narrative Event</span>}
+          {!hideDate && isNew && !D && !R && <span style={{ fontSize: 7, color: '#c9a14a', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.15em', marginLeft: 'auto' }}>● New</span>}
+        </div>
+      )}
+      {showHeaderRow && <div style={{ height: '0.5px', background: borderColor, marginBottom: 8 }} />}
       <div style={{ fontSize: 14, lineHeight: 1.3, marginBottom: 6, color: D ? '#c03030' : R ? '#8060c0' : T.ink, fontFamily: "'Playfair Display', serif", fontWeight: (D || R) ? 900 : 700, textTransform: D ? 'uppercase' : 'none', letterSpacing: D ? '0.03em' : 'normal' }}>
         {entry.headline}
       </div>
@@ -2214,6 +2288,55 @@ function ConvergenceModal({ event, stars, dispatch }) {
             </button>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── PASSION REVEAL MODAL ─────────────────────────────────────────────────────
+function PassionRevealModal({ revealKey, dispatch }) {
+  const T = useContext(ThemeCtx);
+  const { key, year } = revealKey;
+  const dialogue = PASSION_REVEAL_DIALOGUES[key];
+  if (!dialogue) return null;
+  return (
+    <div style={{ position: 'fixed', inset: 0, zoom: 0.75, zIndex: 210, background: T.modalBg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ maxWidth: 480, width: '100%', background: T.hdr, border: `1px solid ${dialogue.starColor}`, borderTop: `3px solid ${dialogue.starColor}`, padding: '28px 28px 24px', animation: 'fadeInModal 0.45s ease-out forwards', boxShadow: '0 12px 48px rgba(0,0,0,0.4)' }}>
+
+        {/* Label row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <div style={{ fontSize: 7, color: dialogue.starColor, textTransform: 'uppercase', letterSpacing: '0.2em', fontFamily: "'Courier Prime', monospace" }}>
+            Hidden Passion Revealed
+          </div>
+          <div style={{ flex: 1, height: 1, background: dialogue.starColor, opacity: 0.3 }} />
+          <div style={{ fontSize: 9, color: dialogue.starColor, fontFamily: "'Courier Prime', monospace", fontWeight: 700 }}>
+            {dialogue.passionLabel}
+          </div>
+        </div>
+
+        {/* Star name */}
+        <div style={{ fontSize: 9, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: 6 }}>{dialogue.starName}</div>
+
+        {/* Headline */}
+        <div style={{ fontSize: 18, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.2, marginBottom: 16 }}>{dialogue.headline}</div>
+
+        {/* Body */}
+        <div style={{ fontSize: 11, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.75, marginBottom: 22, paddingBottom: 18, borderBottom: `1px solid ${T.bdr}` }}>{dialogue.body(year)}</div>
+
+        {/* Passive signal */}
+        <div style={{ fontSize: 8, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.6, marginBottom: 18 }}>
+          There may be something you can do about this. Sooner or later.
+        </div>
+
+        {/* Continue */}
+        <button
+          onClick={() => dispatch({ type: 'DISMISS_REVEAL' })}
+          style={{ background: 'transparent', border: `1px solid ${dialogue.starColor}`, color: dialogue.starColor, padding: '10px 18px', fontFamily: "'Courier Prime', monospace", fontSize: 9, cursor: 'pointer', letterSpacing: '0.15em', textTransform: 'uppercase', borderRadius: 2, width: '100%', transition: 'background 0.15s, color 0.15s' }}
+          onMouseEnter={e => { e.currentTarget.style.background = dialogue.starColor; e.currentTarget.style.color = T.hdr; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = dialogue.starColor; }}>
+          {dialogue.continueLabel} →
+        </button>
+
       </div>
     </div>
   );
@@ -2375,6 +2498,10 @@ export default function ManifestGame() {
   const advancingRef = useRef(false);
 
   const allActions = [...ACTIONS, ...UNLOCKABLE_ACTIONS.filter(a => state.unlockedActions.includes(a.id))];
+
+  // allPlayable — actions visible in Decisions this season.
+  // Filters: not already taken, within ya/expiry window, quest chain satisfied,
+  // hidden passion visible, repair/betrayal thresholds met.
   const allPlayable = allActions
     .filter(a => {
       if (state.taken.includes(a.id)) return false;
@@ -2409,6 +2536,10 @@ export default function ManifestGame() {
     if (bNew !== aNew) return bNew - aNew;
     return (b.ya ?? 0) - (a.ya ?? 0);
   });
+  // revealed — star IDs shown in the Persons column and in Chronicle effect rows.
+  // A star becomes visible as soon as any of their source actions enters the timeline,
+  // whether or not the player has taken it. Unlockable actions that are in
+  // state.unlockedActions are also included so their star surfaces immediately on unlock.
   const revealed = [...new Set(
     allActions.filter(a => {
       const cTick = state.year * 4 + SEASON_IDX[state.season];
@@ -2480,6 +2611,9 @@ export default function ManifestGame() {
       {showIntro && <IntroScreen onBegin={() => setShowIntro(false)} T={T} />}
 
       {state.ruined && <RuinScreen state={state} dispatch={dispatch} />}
+      {state.pendingReveal.length > 0 && !state.ruined && (
+        <PassionRevealModal revealKey={state.pendingReveal[0]} dispatch={dispatch} />
+      )}
       {state.pendingGuest && !state.ruined && (
         <GuestModal guest={state.pendingGuest} dispatch={dispatch} />
       )}
@@ -2583,7 +2717,38 @@ export default function ManifestGame() {
               <div style={{ fontSize: 13, color: T.inkMut, fontFamily: "'Playfair Display', serif", fontStyle: 'italic', lineHeight: 1.9 }}>
                 The ledger is empty.<br/><br/>You have land, some money, and a series of obligations not yet named.
               </div>
-            ) : state.log.map(entry => <LogEntry key={entry.id} entry={entry} stars={state.stars} revealed={revealed} revealedPassions={state.revealedPassions} isNew={entry.year === state.year && entry.season === state.season} />)}
+            ) : (() => {
+              // Group entries by year+season, preserving log order
+              const groupMap = new Map();
+              const groupOrder = [];
+              for (const entry of state.log) {
+                const key = `${entry.year}-${entry.season}`;
+                if (!groupMap.has(key)) {
+                  groupMap.set(key, { key, year: entry.year, season: entry.season, entries: [] });
+                  groupOrder.push(key);
+                }
+                groupMap.get(key).entries.push(entry);
+              }
+              const grouped = groupOrder.map(k => groupMap.get(k));
+              return grouped.map(group => {
+                const isCurrent = group.year === state.year && group.season === state.season;
+                const vis = SEASON_VISUALS[group.season];
+                return (
+                  <div key={group.key} style={{ marginBottom: 28 }}>
+                    {/* Season header — renders once per group */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 14, paddingBottom: 7, borderBottom: `1px solid ${T.bdr}` }}>
+                      <span style={{ fontSize: 10, color: vis.color }}>{vis.symbol}</span>
+                      <span style={{ fontSize: 9, color: T.inkMut, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.12em' }}>{group.year}, {group.season}</span>
+                      {isCurrent && <span style={{ fontSize: 7, color: '#c9a14a', fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: '0.15em', marginLeft: 'auto' }}>● New</span>}
+                    </div>
+                    {/* Entries — date row suppressed */}
+                    {group.entries.map(entry => (
+                      <LogEntry key={entry.id} entry={entry} stars={state.stars} revealed={revealed} revealedPassions={state.revealedPassions} isNew={isCurrent} hideDate={true} />
+                    ))}
+                  </div>
+                );
+              });
+            })()}
           </div>
 
         </div>

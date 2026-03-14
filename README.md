@@ -8,7 +8,9 @@ Narrative strategy game set in the 1800s American West. Built in React as a play
 
 ## What This Is
 
-A newspaper-desk strategy game. You are a landowner at the crossroads of everything America is becoming. Three people — Esperanza Vallejo, Solomon Reed, and J.T. Whitmore — are watching what you do. Every season you make decisions. Every decision moves something. Some of what you set in motion won't land for years.
+A game about the consequences of your actions. You are a landowner at the crossroads of everything America is becoming. Three people — Esperanza Vallejo, Solomon Reed, and J.T. Whitmore — are watching what you do. Every season you make decisions. Every decision moves something. What you set in motion will ripple forward with each passing season.
+
+Everything is recorded in the Chronicle — a period newspaper that prints what happened, including what you didn't do. The aesthetic is ink and parchment. The ledger is permanent.
 
 This is a prototype. It proves the threshold system works. The full scope — fifty years, a larger guest roster, the compounding newspaper mechanic — is still ahead.
 
@@ -97,8 +99,14 @@ Some Passions are not visible at the start. Both Solomon and Whitmore each carry
 
 Solomon's **Brotherhood** Passion tracks his search for his brother Caleb, missing since the Nevada silver rush. Whitmore's **The Distance** Passion tracks his relationship with his wife Margaret in Cincinnati — the months that have become years, and what that silence is costing both of them. Neither can be acted on until it surfaces.
 
+### Hidden Passion Reveal
+When a hidden Passion first becomes visible, a modal interrupts play before the game continues. Each reveal is a short piece of first-person narration — the character letting something slip that they normally keep close — rather than a system notification. The dialogue body is time-aware: it calculates elapsed years from a fixed historical anchor (Caleb left for Nevada in 1809; Whitmore arrived in the valley in 1811) and writes the duration in natural language. A reveal that fires in 1814 reads differently from one that fires in 1822. Once dismissed, the Passion appears in the Star card permanently. The modal closes with a single continue button and leaves a signal that there may be something the player can do about what they just heard.
+
 ### World Dispatches
 Historical events arrive in the Chronicle regardless of player action, dated and dateline-attributed to period newspapers. The War of 1812, the Missouri Compromise, Jackson's election, the founding of the Anti-Slavery Society, Texas independence, the Mexican-American War, the Gold Rush. These are texture, not mechanics — but they frame what your decisions mean in their moment.
+
+### Chronicle Display
+The Chronicle groups all entries under a single season header per year and season. Every entry from 1812, Spring — an inaction consequence, a world dispatch, a reactive event — appears under one shared header with the season symbol and date, rather than repeating the date on each card. Deferred consequences (⚡) and narrative events (◈) retain their type indicators within the group. The current season is marked with a ● New badge on the group header.
 
 ---
 
