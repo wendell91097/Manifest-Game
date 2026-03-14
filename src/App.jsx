@@ -2626,7 +2626,7 @@ export default function ManifestGame() {
         />
       )}
 
-      <div style={{ background: T.bg, height: '100vh', width: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Courier Prime', monospace", transition: 'background 0.35s' }}>
+      <div style={{ background: T.bg, height: '100vh', width: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', fontFamily: "'Courier Prime', monospace", transition: 'background 0.35s' }}>
 
         {/* HEADER */}
         <div style={{ background: T.hdr, borderBottom: `1px solid ${T.bdr}`, padding: '8px 18px', display: 'flex', alignItems: 'center', gap: 18, flexShrink: 0 }}>
