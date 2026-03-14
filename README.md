@@ -79,13 +79,15 @@ Most actions plant a deferred outcome that fires years later in the Chronicle �
 When a Passion crosses a threshold, a reactive event fires automatically. These appear in the Chronicle as news items, apply secondary effects, and can unlock new actions. Crossing thresholds in either direction can trigger events — positive ones open doors, negative ones close them. Esperanza's trust crossing -50 files a formal complaint against you; crossing +50 grants access to the coalition's private archive and unlocks new strategic options. Solomon's Autonomy crossing -50 restricts your access to the post; his Brotherhood Passion crossing +50 opens contact with his brother's Nevada network. Whitmore's standing crossing +75 gets him promoted to District Supervisor with expanded authority; his Corridor Claim falling below -50 draws a company auditor north.
 
 ### Convergence Events
-When conditions across multiple Stars are simultaneously met, a forced choice appears as a modal. These present direct confrontations between Star interests that cannot be avoided or deferred. Three convergence events are in the prototype:
+When conditions across multiple Stars are simultaneously met, a forced choice appears as a modal. These present direct confrontations between Star interests that cannot be avoided or deferred. Four convergence events are in the prototype.
 
 The **Northern Boundary** confrontation fires when both Esperanza's Land Security and Whitmore's Corridor Claim are above 30 — they call on you in the same week regarding the same strip of land. You must choose.
 
 The **Unlikely Meeting** fires when Solomon's Independence (in either direction, ≥30 in absolute value) and Esperanza's Coalition Strength are both above 30 — each has come to see something the other has, and you are the only person both of them trust. Whether to broker that alliance is yours to decide.
 
-The **Surveyor's Letter** fires when both of Whitmore's visible Passions are above 30 — he asks you, off the record, to help him write to his wife in Cincinnati. He also needs your name on a corridor extension before the month ends. He doesn't connect the two requests out loud. He doesn't have to.
+The **Surveyor's Letter** fires when both of Whitmore's visible Passions are above 30 — he asks you, off the record, to help him write to his wife in Cincinnati. He also needs your name on a corridor extension before the month ends. He doesn't connect the two requests out loud. He doesn't have to. Three choices are available: help with the letter first, push him to the filing first, or attempt both badly.
+
+**Three Letters in One Week** fires when all three Stars' Macropassion averages (in absolute value) reach 20 — meaning each relationship has moved meaningfully in some direction. All three call on you in the same week with urgent, incompatible needs. You can only answer one. The choice text changes depending on your prior history with Solomon's warehouse loan, making this the most context-sensitive moment in the prototype.
 
 ### Transient Guests
 One-off visitors arrive for a window of seasons. The player must respond before advancing the season or they depart unanswered. Unanswered guests are recorded in the Homestead ledger. Guest choices affect Fame and Infamy and add Chronicle entries with or without the player's name attached, depending on the choice made.
@@ -155,6 +157,24 @@ The design question the prototype answers: does the threshold system produce mea
 It does. That's what the prototype is for.
 
 The full design document is in the [QA Portfolio](https://wendell91097.github.io/QA-Portfolio/) under Game Concepts → GC-003.
+
+---
+
+## Prototype Scope and Known Gaps
+
+The prototype proves what it sets out to prove: the threshold system produces meaningful tension, deferred consequences land, and the Narrative Legos framework scales to a multi-Star setting. The gaps below are documented as design work, not bugs.
+
+**No resolution.** The game timeline runs to 1848 and the Gold Rush arrives as a world dispatch — but the game continues without synthesis. For a system built around long-term consequence, there's no final Chronicle entry that pulls the threads together, no moment where the player understands what they built or lost. Even a ruin-equivalent for positive outcomes would change the player's relationship to every earlier decision.
+
+**Action density collapses after 1824.** The last core action is in 1824. The back quarter of the game is passive — world dispatches and quiet seasons, but no new player decisions. The deferred consequences from earlier actions are still firing, but the player has no agency in the final twenty-four years.
+
+**The Distance doesn't arc.** Whitmore's hidden Passion about his wife in Cincinnati has presence early and appears in one convergence event, but has no quest chain and no structural payoff. Brotherhood builds — `hold_letter` → `find_brother` → `introduce_caleb` → `nevada_contacts`. The Distance doesn't, which makes it feel like flavor rather than system.
+
+**The fourth convergence event's trigger is invisible.** Three Letters in One Week fires when all three Stars' absolute Macropassion values reach 20. The player can see individual Passion bars and Macropassion labels, but the combined cross-Star condition is never displayed. The other three convergence events have legible triggers. This one will arrive unexpectedly and won't arrive when waited for.
+
+**The guests run parallel to the main narrative.** The Comanche traveler and Isaiah Drum are the most morally serious scenes in the prototype. Their mechanical connection to the main narrative is thin — small Fame deltas, minor Passion movements. They were written at a level of moral weight the current integration doesn't use. Guest outcomes could feed convergence event conditions or reactive event triggers; currently they don't.
+
+**The Chronicle doesn't support cause-and-effect navigation.** The deferred consequence mechanic's power is the link between a past decision and a future outcome. Once thirty or forty entries have accumulated, tracing those links requires finding the original entry in the scroll. The "consequence of" attribution text helps, but not enough. This is the known gap the "compounding newspaper mechanic" is meant to address in the full version.
 
 ---
 
