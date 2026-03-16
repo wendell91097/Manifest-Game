@@ -190,6 +190,12 @@ const INITIAL_STARS = {
     id: 'esperanza', name: 'Esperanza Vallejo', role: 'Land Grant Heir',
     color: '#c87830',
     community: 'The Californio families of the valley and their servants — 47 people whose livelihoods depend on the Vallejo grant.',
+    intro: {
+      headline: 'The Vallejo grant has been here longer than the territory has.',
+      body: "Esperanza Vallejo's family held this land before American annexation, before the surveys, before any of the paper that now claims to govern it. Forty-seven people's livelihoods depend on the grant holding. She has seen what happens when new landowners arrive with money and intentions. The difference between you and the ones who came before, if there is one, is not yet established.",
+      paperLine: "The Territorial Standard notes the Vallejo grant remains active in the valley. Esperanza Vallejo, of the old Californio families, is understood to be accounting for new arrivals.",
+      continueLabel: "She'll be watching",
+    },
     passions: {
       land: {
         label: 'Land Security',
@@ -247,6 +253,12 @@ const INITIAL_STARS = {
     id: 'solomon', name: 'Solomon Reed', role: 'Freedman & Trader',
     color: '#5a8e52',
     community: 'The freedmen, mixed-race families, and independent traders who orbit Reed\'s post — 31 people with no other reliable anchor in the valley.',
+    intro: {
+      headline: 'Reed\'s Trading Post has been a fixture of the valley road for some years.',
+      body: "Solomon Reed built it from nothing, without federal protection and without the kind of backing that makes building easy. It has grown quietly — thirty-one people orbit it now, freedmen and mixed-race families and independent traders who have no other reliable anchor in the valley. It has reached a size where it is no longer easy to ignore. You are not the first to notice. You may be the first whose noticing matters to him.",
+      paperLine: "Reed's Trading Post on the valley road continues to expand its commercial reach. Solomon Reed, proprietor, has not sought attention and has not been given the courtesy of avoiding it.",
+      continueLabel: 'The post is noted',
+    },
     passions: {
       roots: {
         label: 'Permanence',
@@ -309,6 +321,12 @@ const INITIAL_STARS = {
     id: 'whitmore', name: 'J.T. Whitmore', role: 'Railroad Surveyor',
     color: '#3e6e9a',
     community: 'The survey crews, company agents, and federal contacts working the northern corridor — 89 people whose livelihoods run through Pacific Railroad.',
+    intro: {
+      headline: 'J.T. Whitmore has arrived to survey the northern corridor.',
+      body: "Pacific Railroad sent him. He is professional, thorough, and operating under instructions that were written in an office a long way from this valley. Eighty-nine people's livelihoods run through the company he represents. He did not choose the route — the route was chosen for him — and he is under no illusions about what his presence here means for the people who were here first. He is watching you the way a man watches someone who might make his work easier or considerably harder.",
+      paperLine: "J.T. Whitmore of Pacific Railroad has arrived in the valley to conduct survey work on the proposed northern corridor. He is understood to carry federal authority for the filing.",
+      continueLabel: 'The valley awaits your decisions',
+    },
     passions: {
       corridor: {
         label: 'Corridor Claim',
@@ -1553,13 +1571,7 @@ function checkRuin(state) {
 
   if (!ruinHeadline) return state;
 
-  const ruinEntry = {
-    id: `ruin-${state.year}-${state.season}`,
-    year: state.year, season: state.season,
-    headline: ruinHeadline, body: ruinReason,
-    decision: null, effects: [], isDeferred: false, isQuiet: false, isReactive: true, isRuin: true,
-  };
-  return { ...state, ruined: true, ruinHeadline, ruinReason, log: [ruinEntry, ...state.log] };
+  return { ...state, ruined: true, ruinHeadline, ruinReason };
 }
 
 // ─── WIN CONDITIONS ───────────────────────────────────────────────────────────
@@ -1583,6 +1595,8 @@ const WIN_CONDITIONS = [
     body: "Three people who had every reason to work against each other — and against you — have chosen not to. Esperanza's grant is secure. Solomon's post is a valley institution. Whitmore has what the railroad sent him for, and it didn't cost the valley everything. You navigated the distance between them without harming any of them in the process. That's not luck. Just the result of careful decisions.\n\nThe ledger is full. The valley remembers what you built here.",
     chronicleHeadline: 'A SEASON OF UNUSUAL ACCORD — Landholder credited with brokering lasting valley peace.',
     chronicleBody: "In a valley that has known surveyor disputes, coalition grievances, and federal entanglement, a local landowner has somehow left all three parties in better standing than they arrived. Esperanza Vallejo, Solomon Reed, and J.T. Whitmore were each reached for comment. Each declined, in their own way, to say anything that diminished it.",
+    declineHeadline: 'AN UNUSUAL SEASON PASSES WITHOUT CEREMONY — The arrangement holds. No names attached.',
+    declineBody: "The valley is, for the moment, at something resembling peace. The three parties with the most to gain from conflict have chosen, this season, not to pursue it. No formal record was made of the arrangement. The paper notes only its absence from the docket.",
   },
   {
     id: 'win_hard_bargain',
@@ -1597,6 +1611,8 @@ const WIN_CONDITIONS = [
     body: "You didn't make everyone happy. You made the people who mattered most deeply loyal, and you kept the third from becoming an enemy. That's a different kind of achievement — it requires knowing what you're willing to sacrifice and holding the line on it. The relationship that stayed cold knows what it is. So do you.\n\nThis is what it looks like to win something that costs something. The valley is not at peace. It is in balance. You are the reason.",
     chronicleHeadline: 'VALLEY INTERESTS FIND UNEASY ALIGNMENT — Two deep alliances hold. Third party maintains distance.',
     chronicleBody: "The valley has settled into an arrangement that most considered impossible: two of its most significant actors firmly allied with the local landholder, the third maintaining a cautious distance rather than outright opposition. How long the balance holds is a question for another season.",
+    declineHeadline: 'VALLEY BALANCE HOLDS — Two alliances intact. One party watching from a distance.',
+    declineBody: "The alignment of interests in the valley remains as it has been. Two parties closely tied to the local landholder; one at arm's length. No formal change was recorded this season. The question of how long such arrangements hold without being named is one the paper declines to answer.",
   },
   {
     id: 'win_dominant_power',
@@ -1611,6 +1627,8 @@ const WIN_CONDITIONS = [
     body: "One of them would do almost anything for you. The other two have decided that opposing you costs more than it's worth. You didn't build consensus — you built gravity. Everything in the valley moves in relation to where you stand.\n\nThis is not the same as peace. It is precedence. The valley will remember the shape of what you made here long after the particulars are forgotten.",
     chronicleHeadline: 'VALLEY LANDHOLDER EMERGES AS DOMINANT INTEREST — Others align or step aside.',
     chronicleBody: "It is difficult to say when exactly the balance shifted. The filing histories suggest it happened gradually, then decisively. One party is firmly in partnership. The others have chosen, each in their own calculation, that the cost of opposition exceeds the benefit. The valley road runs through one name now.",
+    declineHeadline: 'VALLEY ROAD RUNS THROUGH ONE NAME — No formal consolidation. The weight is there regardless.',
+    declineBody: "The commercial and legal gravity of the valley continues to concentrate. No announcement was made. None was needed. The other parties are present and accounted for. They have simply stopped contesting the direction of things.",
   },
 ];
 
@@ -1768,12 +1786,15 @@ const INIT = {
   seenActions: [],     // action IDs that have appeared in Decisions (used for ● New badge)
   revealedPassions: [],  // "starId:passionKey" strings permanently unlocked (hidden passions)
   pendingReveal: [],     // { key, year } objects queued for the PassionRevealModal
+  pendingIntros: ['esperanza'],  // Esperanza present from turn 1; Solomon and Whitmore queued by ADVANCE when their actions appear
   pendingGuest: null,    // current GUESTS entry awaiting player response
   guestHistory: [],      // guest IDs already answered or departed unanswered
   homesteadLog: [],      // Crossroads ledger entries { year, season, note }
   ruined: false, ruinHeadline: null, ruinReason: null,
   won: false, wonConditionId: null,
   pendingWin: null,   // WIN_CONDITIONS entry awaiting player accept/decline
+  obscured: false,    // inactivity ending — world moved on without player
+  decisionTick: 0,    // seasons since last player-driven decision; resets on ACT/DECLINE/CHOOSE/deferred fire
 };
 
 function reducer(state, action) {
@@ -1828,7 +1849,7 @@ function reducer(state, action) {
     // can render accurate duration text, then queued for sequential display.
     const newlyRevealed = revealedPassions.filter(k => !state.revealedPassions.includes(k));
     const pendingReveal = [...state.pendingReveal, ...newlyRevealed.map(k => ({ key: k, year: state.year }))];
-    const next = { ...state, stars, taken: [...state.taken, act.id], deferred, revealedPassions, pendingReveal };
+    const next = { ...state, stars, taken: [...state.taken, act.id], deferred, revealedPassions, pendingReveal, decisionTick: 0 };
     return checkWin(checkRuin(checkEvents({ ...next, log: [entry, ...state.log] }, prevStars, [])));
   }
   if (action.type === 'CHOOSE') {
@@ -1853,7 +1874,7 @@ function reducer(state, action) {
     const revealedPassions = checkPassionReveals(stars, state.revealedPassions);
     const newlyRevealed = revealedPassions.filter(k => !state.revealedPassions.includes(k));
     const pendingReveal = [...state.pendingReveal, ...newlyRevealed.map(k => ({ key: k, year: state.year }))];
-    const next = { ...state, stars, pendingChoices: pending, revealedPassions, pendingReveal };
+    const next = { ...state, stars, pendingChoices: pending, revealedPassions, pendingReveal, decisionTick: 0 };
     return checkWin(checkRuin(checkEvents({ ...next, log: [entry, ...state.log] }, prevStars, [])));
   }
   if (action.type === 'ADVANCE') {
@@ -1912,15 +1933,20 @@ function reducer(state, action) {
     // Deferred consequences — actions and echo dispatches.
     // Fire on the Winter→Spring boundary; stamped as nextSeason (Spring) not 'Winter'
     // so they group under the correct Chronicle season header.
+    // A deferred fire resets decisionTick — it is downstream of a player decision.
+    let deferredFired = false;
     for (const d of state.deferred) {
       if (isWinter && d.fireYear <= nextYear) {
         if (!d.isDispatch) stars = applyE(stars, d.effects);
+        deferredFired = true;
         newEntries.push(d.isDispatch
           ? { id: `dispatch-${d.originYear}-${d.fireYear}-${Math.random().toString(36).slice(2,6)}`, year: nextYear, season: nextSeason, headline: d.headline, body: d.body, decision: null, effects: [], isDeferred: false, isQuiet: false, isReactive: false, isDispatch: true, dateline: d.dateline }
           : { id: `def-${d.originYear}-${d.fireYear}-${Math.random().toString(36).slice(2,6)}`, year: nextYear, season: nextSeason, headline: d.headline, body: d.body, decision: `Consequence of: "${d.originLabel}" (${d.originYear})`, effects: d.effects, isDeferred: true, isQuiet: false, isReactive: false }
         );
       } else remaining.push(d);
     }
+
+    const newDecisionTick = deferredFired ? 0 : state.decisionTick + 1;
 
     // Fame / Infamy decay — relevance fades without active maintenance.
     // Grace period: no decay in the season a value was last modified.
@@ -1995,8 +2021,36 @@ function reducer(state, action) {
     const revealedPassions = checkPassionReveals(stars, state.revealedPassions);
     const newlyRevealed = revealedPassions.filter(k => !state.revealedPassions.includes(k));
     const pendingReveal = [...state.pendingReveal, ...newlyRevealed.map(k => ({ key: k, year: state.year }))];
-    const next = { ...state, year: nextYear, season: nextSeason, stars, taken: newTaken, declined: newDeclined, deferred: remaining, quietCount: state.quietCount + (quietEntry ? 1 : 0), seenActions, pendingGuest, guestHistory, homesteadLog, firedEvents: updatedFiredEvents, revealedPassions, pendingReveal, hiddenActions: state.hiddenActions };
-    return checkWin(checkRuin(checkEvents({ ...next, log: [...newEntries, ...(quietEntry ? [quietEntry] : []), ...state.log] }, prevStars, [])));
+
+    // Star intro queuing — fires when a star's actions first appear in the *incoming* season.
+    // Uses nextYear/nextSeason tick so the intro lands the same turn as the action.
+    const nextTick = nextYear * 4 + SEASON_IDX[nextSeason];
+    const nextAvailable = [...ACTIONS, ...UNLOCKABLE_ACTIONS.filter(a => state.unlockedActions.includes(a.id))]
+      .filter(a => !state.taken.includes(a.id) && !state.hiddenActions.includes(a.id)
+        && (a.ya ?? 0) * 4 + (a.yaSeasonIdx ?? 0) <= nextTick
+        && (!a.expires || a.expires * 4 + (a.expiresSeason ? SEASON_IDX[a.expiresSeason] : 0) > nextTick))
+      .map(a => a.id);
+    const newStarSources = [...new Set(nextAvailable.map(id => {
+      const act = [...ACTIONS, ...UNLOCKABLE_ACTIONS].find(a => a.id === id);
+      return act?.source;
+    }).filter(Boolean))];
+    const prevStarSources = [...new Set([...state.seenActions, ...allAvailable].map(id => {
+      const act = [...ACTIONS, ...UNLOCKABLE_ACTIONS].find(a => a.id === id);
+      return act?.source;
+    }).filter(Boolean))];
+    const newIntroStars = newStarSources.filter(
+      id => !prevStarSources.includes(id) && !state.pendingIntros.includes(id)
+    );
+    const pendingIntros = [...state.pendingIntros, ...newIntroStars];
+
+    const next = { ...state, year: nextYear, season: nextSeason, stars, taken: newTaken, declined: newDeclined, deferred: remaining, quietCount: state.quietCount + (quietEntry ? 1 : 0), seenActions, pendingGuest, guestHistory, homesteadLog, firedEvents: updatedFiredEvents, revealedPassions, pendingReveal, hiddenActions: state.hiddenActions, decisionTick: newDecisionTick, pendingIntros };
+    const afterEvents = checkWin(checkRuin(checkEvents({ ...next, log: [...newEntries, ...(quietEntry ? [quietEntry] : []), ...state.log] }, prevStars, [])));
+    // Obscurity check — if the player has been inactive for 10 seasons and the game
+    // hasn't already ended, the world closes around the absence.
+    if (!afterEvents.ruined && !afterEvents.won && !afterEvents.obscured && newDecisionTick >= 10) {
+      return { ...afterEvents, obscured: true };
+    }
+    return afterEvents;
   }
   if (action.type === 'GUEST_CHOOSE') {
     const guest = GUESTS.find(g => g.id === action.guestId);
@@ -2026,6 +2080,9 @@ function reducer(state, action) {
   if (action.type === 'DISMISS_REVEAL') {
     return { ...state, pendingReveal: state.pendingReveal.slice(1) };
   }
+  if (action.type === 'DISMISS_INTRO') {
+    return { ...state, pendingIntros: state.pendingIntros.slice(1) };
+  }
   // DECLINE — player explicitly refuses an action, firing inaction effects immediately.
   // Marks action as taken so it doesn't recur; if no inaction block, silently removes.
   // Exception: mysteryExpiry actions go to hiddenActions instead — the card disappears
@@ -2051,34 +2108,35 @@ function reducer(state, action) {
         isDeferred: false, isQuiet: false, isReactive: false, isInaction: true, isDeclined: true,
       });
     }
-    const next = { ...state, stars, taken: [...state.taken, act.id], declined: [...state.declined, act.id] };
+    const next = { ...state, stars, taken: [...state.taken, act.id], declined: [...state.declined, act.id], decisionTick: 0 };
     return checkWin(checkRuin(checkEvents({ ...next, log: [...newEntries, ...state.log] }, prevStars, [])));
   }
   if (action.type === 'RESET') return INIT;
   if (action.type === 'WIN_ACCEPT') {
     const wc = state.pendingWin;
     if (!wc) return state;
-    const entry = {
-      id: `win-${wc.id}-${state.year}-${state.season}`,
-      year: state.year, season: state.season,
-      headline: wc.chronicleHeadline, body: wc.chronicleBody,
-      decision: null, effects: [], isDeferred: false, isQuiet: false, isReactive: true, isWin: true,
-    };
     return {
       ...state,
       won: true, wonConditionId: wc.id,
       pendingWin: null,
       firedEvents: [...state.firedEvents, wc.id],
-      log: [entry, ...state.log],
     };
   }
   if (action.type === 'WIN_DECLINE') {
     const wc = state.pendingWin;
     if (!wc) return state;
+    const entry = {
+      id: `win-decline-${wc.id}-${state.year}-${state.season}`,
+      year: state.year, season: state.season,
+      headline: wc.declineHeadline,
+      body: wc.declineBody,
+      decision: null, effects: [], isDeferred: false, isQuiet: false, isReactive: true,
+    };
     return {
       ...state,
       pendingWin: null,
       firedEvents: [...state.firedEvents, wc.id],
+      log: [entry, ...state.log],
     };
   }
   return state;
@@ -2631,6 +2689,40 @@ function ConvergenceModal({ event, stars, dispatch }) {
   );
 }
 
+// ─── STAR INTRO MODAL ─────────────────────────────────────────────────────────
+// Fires once per Star when they first enter the player's accounting.
+// Period newspaper voice — observational, not addressed to the player directly.
+function StarIntroModal({ starId, stars, dispatch }) {
+  const T = useContext(ThemeCtx);
+  const star = stars[starId];
+  if (!star?.intro) return null;
+  const { intro } = star;
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 210, zoom: 0.75, background: T.modalBg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ maxWidth: 480, width: '100%', background: T.hdr, border: `1px solid ${star.color}`, borderTop: `3px solid ${star.color}`, padding: T.padModal, animation: 'fadeInModal 0.45s ease-out forwards', boxShadow: '0 12px 48px rgba(0,0,0,0.4)' }}>
+        <div style={{ fontSize: T.fsXxs, color: star.color, textTransform: 'uppercase', letterSpacing: T.lsXWide, fontFamily: "'Courier Prime', monospace", marginBottom: 10 }}>
+          Met a Person of Interest
+        </div>
+        <div style={{ fontSize: 22, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.15, marginBottom: 4 }}>{star.name}</div>
+        <div style={{ fontSize: T.fsSm, color: star.color, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: T.lsWide, marginBottom: 16 }}>{star.role}</div>
+        <div style={{ height: '0.5px', background: T.bdr, marginBottom: 16 }} />
+        <div style={{ fontSize: 18, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.2, marginBottom: 16 }}>{intro.headline}</div>
+        <div style={{ fontSize: T.fsBase, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.75, marginBottom: 18, paddingBottom: 14, borderBottom: `1px solid ${T.bdr}` }}>{intro.body}</div>
+        <div style={{ fontSize: T.fsXs, color: T.inkFaint, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: T.lhNormal, marginBottom: 20, borderLeft: `2px solid ${T.bdrHi}`, paddingLeft: 8 }}>
+          ✦ {intro.paperLine}
+        </div>
+        <button
+          onClick={() => dispatch({ type: 'DISMISS_INTRO' })}
+          style={{ background: 'transparent', border: `1px solid ${star.color}`, color: star.color, padding: '10px 18px', fontFamily: "'Courier Prime', monospace", fontSize: T.fsSm, cursor: 'pointer', letterSpacing: T.lsWide, textTransform: 'uppercase', borderRadius: T.radius, width: '100%', transition: 'background 0.15s, color 0.15s' }}
+          onMouseEnter={e => { e.currentTarget.style.background = star.color; e.currentTarget.style.color = T.hdr; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = star.color; }}>
+          {intro.continueLabel} →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── PASSION REVEAL MODAL ─────────────────────────────────────────────────────
 function PassionRevealModal({ revealKey, dispatch }) {
   const T = useContext(ThemeCtx);
@@ -2855,6 +2947,45 @@ function WinScreen({ state, dispatch }) {
     </div>
   );
 }
+// ─── OBSCURITY SCREEN ─────────────────────────────────────────────────────────
+// Fires when the player has gone 10 seasons without a meaningful decision.
+// Not ruin — no one moved against you. Not a win — you didn't move decisively.
+// The world filled the space you left. The homestead stays yours. Your name stopped
+// appearing in anyone else's accounting.
+function ObscurityScreen({ state, dispatch }) {
+  const T = useContext(ThemeCtx);
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, fontFamily: "'Courier Prime', monospace" }}>
+      <div style={{ maxWidth: 560, width: '100%', textAlign: 'center' }}>
+        <div style={{ fontSize: T.fsXxs, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.3em', marginBottom: 20 }}>{state.season}, {state.year} — The Ledger Goes Quiet</div>
+        <div style={{ fontSize: T.fsBase, color: T.inkFaint, fontFamily: "'Playfair Display', serif", fontStyle: 'italic', marginBottom: 14 }}>— — —</div>
+        <div style={{ fontSize: 26, color: T.inkMut, fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.15, marginBottom: 24, letterSpacing: '0.02em' }}>THE VALLEY FOUND ITS OWN ARRANGEMENT</div>
+        <div style={{ fontSize: 12, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.85, marginBottom: 36, borderTop: `1px solid ${T.bdr}`, borderBottom: `1px solid ${T.bdr}`, padding: '20px 0', textAlign: 'left' }}>
+          The valley continued. The arrangements made here held or didn't, and new parties arrived to test them. The homestead remained in your name. Your name stopped appearing in anyone else's accounting.{'\n\n'}Someone else read the room. The space you left did not stay empty.
+        </div>
+        {state.homesteadLog.length > 0 && (
+          <div style={{ marginBottom: 32, textAlign: 'left', background: T.card, border: `1px solid ${T.bdr}`, borderRadius: T.radius, padding: '14px 16px' }}>
+            <div style={{ fontSize: T.fsXxs, color: T.inkFaint, textTransform: 'uppercase', letterSpacing: T.lsXWide, marginBottom: 10 }}>Those Who Passed Through the Crossroads</div>
+            {state.homesteadLog.slice(0, 6).map((item, i) => (
+              <div key={i} style={{ fontSize: T.fsMd, color: T.inkDim, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: T.lhRelaxed, marginBottom: 6 }}>
+                <span style={{ color: T.bdrHi }}>{item.year} — </span>{item.note}
+              </div>
+            ))}
+          </div>
+        )}
+        <button
+          onClick={() => dispatch({ type: 'RESET' })}
+          style={{ background: 'transparent', border: `1px solid ${T.bdrHi}`, color: T.inkMut, padding: '10px 28px', fontFamily: "'Courier Prime', monospace", fontSize: T.fsMd, cursor: 'pointer', letterSpacing: T.lsWide, textTransform: 'uppercase', borderRadius: T.radius }}
+          onMouseEnter={e => { e.currentTarget.style.background = T.cardSub; e.currentTarget.style.color = T.ink; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = T.inkMut; }}>
+          Begin Again — {SCENARIO.startYear}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── HEADER MENU ──────────────────────────────────────────────────────────────
 function HeaderMenu({ dispatch, darkMode, setDarkMode }) {
   const T = useContext(ThemeCtx);
   const [open, setOpen] = useState(false);
@@ -3020,13 +3151,17 @@ export default function ManifestGame() {
 
       {state.ruined && <RuinScreen state={state} dispatch={dispatch} />}
       {state.won && !state.ruined && <WinScreen state={state} dispatch={dispatch} />}
-      {state.pendingWin && !state.ruined && !state.won && (
+      {state.obscured && !state.ruined && !state.won && <ObscurityScreen state={state} dispatch={dispatch} />}
+      {state.pendingWin && !state.ruined && !state.won && !state.obscured && (
         <WinModal condition={state.pendingWin} dispatch={dispatch} />
       )}
-      {state.pendingReveal.length > 0 && !state.ruined && !state.won && (
+      {state.pendingIntros.length > 0 && !state.ruined && !state.won && !state.obscured && (
+        <StarIntroModal starId={state.pendingIntros[0]} stars={state.stars} dispatch={dispatch} />
+      )}
+      {state.pendingReveal.length > 0 && !state.ruined && !state.won && !state.obscured && (
         <PassionRevealModal revealKey={state.pendingReveal[0]} dispatch={dispatch} />
       )}
-      {state.pendingGuest && !state.ruined && !state.won && (
+      {state.pendingGuest && !state.ruined && !state.won && !state.obscured && (
         <GuestModal guest={state.pendingGuest} dispatch={dispatch} />
       )}
 
