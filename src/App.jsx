@@ -188,6 +188,7 @@ function thresholdColor(v) {
 const INITIAL_STARS = {
   esperanza: {
     id: 'esperanza', name: 'Esperanza Vallejo', role: 'Land Grant Heir',
+    ya: 1810, yaSeasonIdx: 0, // present from game start — predates the player's arrival
     color: '#c87830',
     community: 'The Californio families of the valley and their servants — 47 people whose livelihoods depend on the Vallejo grant.',
     intro: {
@@ -251,6 +252,7 @@ const INITIAL_STARS = {
 
   solomon: {
     id: 'solomon', name: 'Solomon Reed', role: 'Freedman & Trader',
+    ya: 1810, yaSeasonIdx: 1, // post has been here — becomes relevant Summer 1810
     color: '#5a8e52',
     community: 'The freedmen, mixed-race families, and independent traders who orbit Reed\'s post — 31 people with no other reliable anchor in the valley.',
     intro: {
@@ -319,6 +321,7 @@ const INITIAL_STARS = {
 
   whitmore: {
     id: 'whitmore', name: 'J.T. Whitmore', role: 'Railroad Surveyor',
+    ya: 1811, yaSeasonIdx: 0, // arrives Spring 1811 to begin the survey
     color: '#3e6e9a',
     community: 'The survey crews, company agents, and federal contacts working the northern corridor — 89 people whose livelihoods run through Pacific Railroad.',
     intro: {
@@ -479,7 +482,7 @@ const ACTIONS = [
     },
   },
   {
-    id: 'federal_claim', ya: 1811, source: 'whitmore', expires: 1812, msgType: 'Proposal',
+    id: 'federal_claim', ya: 1811, source: 'whitmore', expires: 1812, mysteryExpiry: true, msgType: 'Proposal',
     dispatch: "Co-Sign the Federal Route Claim with Whitmore",
     desc: "Whitmore needs a local landowner's signature to give the federal filing credibility. Your name on this paper establishes the northern corridor as a federal zone and extinguishes prior claims within it. Esperanza will hear about it. Others in the valley will too.",
     descRevealed: { star: 'solomon', text: "Whitmore needs a local landowner's signature to give the federal filing credibility. Your name on this paper establishes the northern corridor as a federal zone and extinguishes prior claims within it. Solomon will see the filing. Esperanza will hear about it." },
@@ -546,7 +549,7 @@ const ACTIONS = [
     },
   },
   {
-    id: 'testify_whitmore', ya: 1813, source: 'whitmore', expires: 1814, msgType: 'Demand',
+    id: 'testify_whitmore', ya: 1813, source: 'whitmore', expires: 1814, mysteryExpiry: true, msgType: 'Demand',
     moral: '"In the mouth of two or three witnesses shall every word be established." — 2 Corinthians 13:1',
     dispatch: "Give Sworn Testimony for Whitmore in Land Court",
     desc: "Whitmore's land case hinges on a credible local witness. He needs someone who can say under oath that they saw the survey markers, that the route was established. Render unto Caesar what is Caesar's — but a false oath is a different matter than a true one. Your word carries weight precisely because it is not yet spent.",
@@ -663,7 +666,7 @@ const ACTIONS = [
     },
   },
   {
-    id: 'report_trespass', ya: 1818, source: 'esperanza', expires: 1819, msgType: 'Appeal',
+    id: 'report_trespass', ya: 1818, source: 'esperanza', expires: 1819, mysteryExpiry: true, msgType: 'Appeal',
     dispatch: "File a Formal Trespass Complaint Against the Railroad",
     desc: "Whitmore's survey crew has crossed the Vallejo parcel without legal authorization, again. You can file a formal complaint with the territorial magistrate. Bearing false witness is a sin; so is silence in the face of wrong. He will not forget the name on the filing — but you will know what you did and did not do.",
     result: "TRESPASS COMPLAINT FILED AGAINST PACIFIC RAILROAD — Settler charges survey crew with unlawful entry on Vallejo parcel.",
@@ -711,7 +714,7 @@ const ACTIONS = [
     },
   },
   {
-    id: 'deed_esperanza', ya: 1820, source: 'esperanza', expires: 1822, msgType: 'Request',
+    id: 'deed_esperanza', ya: 1820, source: 'esperanza', expires: 1822, mysteryExpiry: true, msgType: 'Request',
     dispatch: "Help Esperanza Secure the Deed in Her Own Name",
     desc: "The Vallejo grant is held under her late father's estate. She cannot navigate the territorial recorder's office without an Anglo intermediary — the law, in practice, requires one. You can serve that function. It is a half-day's work and it will bind you to her cause in ways that are not undone by subsequent choices.",
     result: "VALLEJO LAND GRANT RE-RECORDED UNDER ESPERANZA VALLEJO — Old Californio claim formally transferred to surviving heir.",
@@ -902,10 +905,10 @@ function macropassion(passions) {
   const avg = macropassionValue(passions);
   if (avg >= 75)  return { label: 'Bound Ally',         col: '#4a8e42' };
   if (avg >= 50)  return { label: 'Steadfast Friend',   col: '#6a9e42' };
-  if (avg >= 30)  return { label: 'Trusted Ally',       col: '#8aae42' };
+  if (avg >= 30)  return { label: 'Friendly Neighbor',  col: '#8aae42' };
   if (avg >= 15)  return { label: 'Cautious Friend',    col: '#9aae52' };
   if (avg > -15)  return { label: 'Known Acquaintance', col: '#8a8060' };
-  if (avg > -30)  return { label: 'Wary Stranger',      col: '#be8040' };
+  if (avg > -30)  return { label: 'Clear Competitor',   col: '#be8040' };
   if (avg > -50)  return { label: 'Open Opponent',      col: '#be6030' };
   if (avg > -75)  return { label: 'Active Adversary',   col: '#be3820', warning: 'Willing to move against you. Your other alliances may still give them pause — for now.' };
   return              { label: 'Sworn Enemy',           col: '#9e1a10', warning: 'Will act to destroy you regardless of what it costs them or anyone else.' };
@@ -926,7 +929,87 @@ function repStateKey(star) {
   return fH && iH ? 'HH' : fH ? 'HL' : iH ? 'LH' : 'LL';
 }
 
-// ─── PASSION REVEAL DIALOGUES ─────────────────────────────────────────────────
+// ─── DELTA VISIBILITY ────────────────────────────────────────────────────────
+// Effect delta values (the numbers) are progressively revealed as macropassion grows.
+// The narrative why text is always visible — the player understands what is happening
+// from context. The exact magnitude becomes information earned through relationship.
+//
+//  Default (below Cautious Friend): star name + passion label visible, delta hidden (±?)
+//  Cautious Friend  (≥15):  source Star's own passion deltas visible
+//  Friendly Neighbor(≥30):  all Stars' deltas on this source's actions visible
+//  Steadfast Friend (≥50):  full visibility including threshold crossing previews
+//
+// effectVisibility(sourceStarId, effectStarId, stars) → 'hidden' | 'partial' | 'full'
+function effectVisibility(sourceStarId, effectStarId, stars) {
+  const sourceMacro = macropassionValue(stars[sourceStarId]?.passions ?? {});
+  if (sourceMacro >= 50) return 'full';
+  if (sourceMacro >= 30) return 'full';   // all Stars visible at Friendly Neighbor
+  if (sourceMacro >= 15) {
+    return effectStarId === sourceStarId ? 'full' : 'hidden';
+  }
+  return 'hidden';
+}
+
+// ─── MODIFIER COMPUTATION ─────────────────────────────────────────────────────
+// Computes active buffs/debuffs for each Star based on macropassion level and
+// dominant passion. Returns a modifiers object consumed by applyE, applyFI,
+// and action availability checks.
+//
+// modifiers[starId] = {
+//   fameMult:    number  — multiplier on fame gains from actions touching this Star
+//   infamyMult:  number  — multiplier on infamy gains
+//   passionBonus: number — flat addition to positive passion gains
+//   deltaObscured: bool  — whether effect deltas are hidden in action cards
+//   auditStars:  Set     — star IDs whose actions are rate-limited this season
+// }
+function computeModifiers(stars) {
+  const mods = {};
+  for (const starId of Object.keys(stars)) {
+    const star = stars[starId];
+    const macro = macropassionValue(star.passions);
+
+    // Find dominant passion (highest absolute value)
+    const dominant = Object.entries(star.passions)
+      .reduce((a, [k, p]) => Math.abs(p.value) > Math.abs(a[1]) ? [k, p] : a, ['', { value: 0 }]);
+    const domValue = dominant[1].value ?? 0;
+
+    let fameMult = 1.0;
+    let infamyMult = 1.0;
+    let passionBonus = 0;
+    let deltaObscured = false;
+
+    if (macro >= 75) {
+      // Bound Ally
+      fameMult = 1.5; infamyMult = 0.5; passionBonus = 5;
+    } else if (macro >= 50) {
+      // Steadfast Friend
+      fameMult = 1.25; infamyMult = 0.75; passionBonus = 3;
+    } else if (macro >= 30) {
+      // Friendly Neighbor
+      fameMult = 1.1;
+    } else if (macro >= 15) {
+      // Cautious Friend — no modifiers yet
+    } else if (macro > -15) {
+      // Known Acquaintance
+      deltaObscured = true;
+    } else if (macro > -30) {
+      // Clear Competitor
+      fameMult = 0.75; infamyMult = 1.25; deltaObscured = true;
+    } else if (macro > -50) {
+      // Open Opponent
+      fameMult = 0.5; infamyMult = 1.5; passionBonus = 0; deltaObscured = true;
+    } else if (macro > -75) {
+      // Active Adversary
+      fameMult = 0.5; infamyMult = 2.0; deltaObscured = true;
+    } else {
+      // Sworn Enemy
+      fameMult = 0.25; infamyMult = 2.0; deltaObscured = true;
+    }
+
+    mods[starId] = { fameMult, infamyMult, passionBonus, deltaObscured, macro, domValue };
+  }
+  return mods;
+}
 // Shown once when a hidden passion first becomes visible (pendingReveal queue).
 // body() receives the reveal year so duration language is accurate at any point
 // in the timeline — both anchors are fixed historical events:
@@ -972,6 +1055,7 @@ const REACTIVE_EVENTS = [
   {
     id: 're_esperanza_trust_hostile',
     star: 'esperanza', passion: 'trust', threshold: -50, direction: 'below',
+    requiresMacropassionMax: -15, // complaint only fires if relationship is Clear Competitor or worse
     headline: 'VALLEJO FILES FORMAL COMPLAINT — Settler named in public land dispute.',
     body: "Esperanza Vallejo has filed a formal complaint with the territorial court naming a local landholder as party to disputed boundary claims. She cited a pattern of actions working against Californio land interests. The filing is now public record.",
     effects: [
@@ -985,6 +1069,7 @@ const REACTIVE_EVENTS = [
   {
     id: 're_esperanza_trust_ally',
     star: 'esperanza', passion: 'trust', threshold: 50, direction: 'above',
+    requiresMacropassion: 30, // archive only opens if the overall relationship is Friendly Neighbor or better
     headline: 'VALLEJO OPENS COALITION ARCHIVE — Settler granted access to Californio land records.',
     body: "Esperanza Vallejo has granted a local settler access to the coalition's private land archive — the first Anglo to be so trusted. The records document boundary claims predating American annexation. What is done with them is yet to be seen.",
     effects: [],
@@ -996,6 +1081,7 @@ const REACTIVE_EVENTS = [
   {
     id: 're_solomon_autonomy_hostile',
     star: 'solomon', passion: 'autonomy', threshold: -50, direction: 'below',
+    requiresMacropassionMax: -15, // account restriction only fires if relationship is Clear Competitor or worse
     headline: "REED'S POST RESTRICTS CERTAIN ACCOUNTS — Trader quietly closes access to known railroad associates.",
     body: "Solomon Reed has quietly stopped doing business with several valley landholders, citing concerns about federal entanglement. He did not publish a list. He did not need to. People who trade at the post know who is no longer welcome.",
     effects: [],
@@ -1007,6 +1093,7 @@ const REACTIVE_EVENTS = [
   {
     id: 're_solomon_caleb_found',
     star: 'solomon', passion: 'caleb', threshold: 50, direction: 'above',
+    requiresMacropassion: 15, // Nevada contacts only shared if relationship is Cautious Friend or better
     headline: "CALEB REED RETURNS TO THE VALLEY — Freedman's brother arrives with Nevada contacts.",
     body: "Solomon Reed has word that his brother Caleb is alive and located in the Nevada silver territory — and that he knows men who move money outside federal channels. The contacts exist. Solomon is not yet sharing them freely, but for the right person, the door is open.",
     effects: [],
@@ -1018,6 +1105,7 @@ const REACTIVE_EVENTS = [
   {
     id: 're_whitmore_standing_promoted',
     star: 'whitmore', passion: 'standing', threshold: 75, direction: 'above',
+    requiresMacropassion: 30, // promotion benefits you only if relationship is Friendly Neighbor or better
     headline: 'WHITMORE NAMED DISTRICT SUPERVISOR — Pacific Railroad elevates northern corridor lead.',
     body: "J.T. Whitmore has been named District Supervisor for the northern corridor, bringing with him full company authority over land filings in the valley. His promotion is a direct consequence of his progress here. The company now acts through him with considerably more force.",
     effects: [
@@ -1099,15 +1187,23 @@ const UNLOCKABLE_ACTIONS = [
     source: 'solomon',
     msgType: 'Opportunity',
     dispatch: "Meet Caleb's Nevada Contacts Outside Federal Record",
-    desc: "The men Caleb knows move silver, information, and influence through channels that don't appear in any federal register. A meeting — arranged quietly, off the valley road — could open possibilities that the official economy cannot.",
+    desc: "The men Caleb knows move silver, information, and influence through channels that don't appear in any federal register. A meeting — arranged quietly, off the valley road — could open possibilities that the official economy cannot. Solomon is offering something precious. He knows it and so do you.",
     result: "SETTLER MEETS WITH NEVADA INTERESTS — Private arrangement concluded outside territorial record.",
     resultBody: "A discreet meeting between a local settler and associates of Caleb Reed was concluded this week at an undisclosed location. No record was filed. No names were published. The valley road trading post was busy the same afternoon.",
     effects: [
-      { star: 'solomon', passion: 'roots',    delta: +10, why: "A settler plugged into his brother's network is a settler with skin in Solomon's game." },
-      { star: 'solomon', passion: 'autonomy', delta: +20, why: "Operating outside federal record together creates a kind of trust that legal dealings cannot." },
-      { star: 'whitmore', passion: 'standing', delta: -10, why: "Off-record commerce in his corridor is a problem he will eventually be held accountable for." },
+      { star: 'solomon', passion: 'roots',      delta: +10, why: "A settler plugged into his brother's network is a settler with skin in Solomon's game." },
+      { star: 'solomon', passion: 'autonomy',   delta: +20, why: "Operating outside federal record together creates a kind of trust that legal dealings cannot." },
+      { star: 'solomon', passion: 'caleb',      delta: -15, why: "You have made his brother's network into an instrument. Solomon knows the difference between sharing and being used." },
+      { star: 'whitmore', passion: 'standing',  delta: -10, why: "Off-record commerce in his corridor is a problem he will eventually be held accountable for." },
     ],
-    def: null,
+    def: {
+      years: 6,
+      headline: "NEVADA INTERESTS DELIVER — Arrangement from years prior produces return.",
+      body: "The men introduced through Caleb Reed's Nevada network have quietly produced what was promised. A territorial filing — clean, uncontested, outside the railroad's sight lines — has been registered in the settler's name. Caleb Reed was not publicly thanked. He did not expect to be.",
+      effects: [
+        { star: 'solomon', passion: 'roots',  delta: +20, why: "The network delivered. Whatever the cost, the arrangement was real." },
+      ],
+    },
   },
 ];
 
@@ -1245,9 +1341,12 @@ const CONVERGENCE_EVENTS = [
   },
   {
     id: 'conv_three_star_reckoning',
-    condition: (stars, taken) => {
+    condition: (stars, taken, state) => {
+      // Whitmore must be visible in Persons — his Star ya tick must have passed.
+      const whitmoreRevealed = state?.revealedStars?.includes('whitmore') ?? false;
       const absMacro = s => Math.abs(macropassionValue(s.passions));
-      return absMacro(stars.esperanza) >= 20 && absMacro(stars.solomon) >= 20 && absMacro(stars.whitmore) >= 20;
+      return whitmoreRevealed &&
+        absMacro(stars.esperanza) >= 30 && absMacro(stars.solomon) >= 30 && absMacro(stars.whitmore) >= 30;
     },
     headline: 'THREE LETTERS IN ONE WEEK — All of them need something.',
     bodyFn: (taken, declined) => taken.includes('lend_solomon') && !declined.includes('lend_solomon')
@@ -1328,13 +1427,28 @@ const CONVERGENCE_EVENTS = [
 ];
 
 // ─── TRANSIENT GUESTS ─────────────────────────────────────────────────────────
-// One-off visitors who appear for a window of seasons. The player must respond
-// before advancing, or they depart unanswered. Fates echo through the papers.
+// ─── GUEST POOL ───────────────────────────────────────────────────────────────
+// Strangers arrive via Poisson-style draw — roughly every 3–5 years on average.
+// Each season after the last guest departed, the draw probability increases until
+// a guest fires, then resets. Guests are drawn randomly from the available pool
+// weighted by their weight value. Some guests require a Star's macropassion to
+// be above a threshold before they can appear (gated by relationship depth).
+//
+// Fields:
+//   weight: number          — relative probability weight (higher = more likely)
+//   requiresMacropassion:   — { star, min } — gate on macropassion threshold
+//   Any unlocked by Star passions can be added to the pool via unlocksGuests
+//   on reactive events (infrastructure ready, not yet authored).
+//
+// Note: additional guests can be added to this pool freely — the draw system
+// handles selection. Some guests intentionally only appear if the player has
+// built certain relationships.
 
-const GUESTS = [
+const GUEST_POOL = [
   {
     id: 'comanche_night',
-    ya: 1811, expires: 1814,
+    weight: 10,
+    // No macropassion gate — can appear early, moral weight regardless of relationships
     name: 'Unknown — Traveling Under Another Name',
     role: 'Moving East. One Night.',
     arrival: 'He arrives at dusk with a single horse and says very little. He is traveling under a name that is not his. His sister is missing. He needs one night\'s shelter and your silence. The marshal will ask questions in the morning.',
@@ -1394,7 +1508,8 @@ const GUESTS = [
   },
   {
     id: 'underground_conductor',
-    ya: 1816, expires: 1819,
+    weight: 10,
+    requiresMacropassion: { star: 'solomon', min: 15 }, // Solomon must be at least Cautious Friend — his network surfaces this
     name: 'Isaiah Drum',
     role: 'Freedman. Moving People North.',
     arrival: 'He comes to the back door after dark with seven people who do not speak. He is moving them out of the South along a route that exists only in the memory of the people who walk it. He needs your barn for two nights and your silence indefinitely. He does not ask this lightly.',
@@ -1435,7 +1550,8 @@ const GUESTS = [
   },
   {
     id: 'the_teacher',
-    ya: 1820, expires: 1823,
+    weight: 10,
+    // No macropassion gate — moral clarity is available regardless of standing
     name: 'Clara Finch',
     role: 'Schoolteacher. Heading to the Mining Camps.',
     arrival: 'She is heading to a mining camp that does not know it needs her. The road north forks: one route is faster but runs through contested territory with reports of violence this season. The other is longer and safer. She asks you which road to take. You know this country.',
@@ -1473,9 +1589,287 @@ const GUESTS = [
       },
     ],
   },
+  {
+    id: 'retired_outlaw',
+    weight: 9,
+    requiresMacropassion: { star: 'esperanza', min: 15 },
+    // Esperanza's community would recognize the name — requires she's at least Cautious Friend
+    name: 'A Man Going to His Sister',
+    role: 'Old Business. Quiet Road.',
+    arrival: "He is older than he looks at first, riding a borrowed horse and carrying nothing worth stealing. He gives a name that is probably not his. Over supper he mentions a rancho near Monterey — a name the Californio families would recognize. Fifteen years ago, he was someone the valley was afraid of. He says he is going to his sister. He says he is done with the rest of it. You believe him more than you expected to.",
+    moral: '"Blessed are the merciful, for they shall obtain mercy." — Matthew 5:7',
+    choices: [
+      {
+        id: 'let_him_go',
+        label: 'Say Nothing',
+        desc: "He leaves at first light. You don't ask his name again.",
+        homesteadNote: 'A man with an old name stopped one night. Left quiet. Said nothing about where he was going.',
+        effects: [
+          { star: 'esperanza', passion: 'trust',    delta: +8,  why: "A settler who holds his tongue about old Californio business is a settler she can work with." },
+          { star: 'solomon',   passion: 'autonomy', delta: +5,  why: "You let a man pass without involving the law. That kind of judgment travels." },
+        ],
+        fameEffects:   { esperanza: +5, solomon: +8, whitmore: 0 },
+        infamyEffects: { esperanza: 0,  solomon: 0,  whitmore: 0 },
+        logHeadline: 'NO REPORT — Crossroads quiet.',
+        logBody: 'Nothing of note was reported at the valley crossroads.',
+        echoDef: null,
+      },
+      {
+        id: 'warn_esperanza',
+        label: "Send Word to Esperanza",
+        desc: "You get a message to Esperanza before he's out of the valley. What happens next is hers to decide.",
+        homesteadNote: 'Sent word to Vallejo about a man passing through. Did not wait to see what came of it.',
+        effects: [
+          { star: 'esperanza', passion: 'trust',      delta: +12, why: "You brought her information she would want. She will remember that." },
+          { star: 'esperanza', passion: 'coalition',  delta: +5,  why: "Old justice handled inside the community, not through Anglo law." },
+        ],
+        fameEffects:   { esperanza: +10, solomon: 0, whitmore: 0 },
+        infamyEffects: { esperanza: 0,   solomon: 0, whitmore: 0 },
+        logHeadline: 'NO REPORT — Crossroads quiet.',
+        logBody: 'Nothing of note was reported at the valley crossroads.',
+        echoDef: null,
+      },
+      {
+        id: 'report_outlaw',
+        label: 'Report Him to the Territorial Office',
+        desc: "You file a report. He's taken into custody two days down the road.",
+        homesteadNote: 'Reported a man passing through. Heard later he was taken in for old business.',
+        effects: [
+          { star: 'esperanza', passion: 'trust',      delta: -15, why: "You handed a man over to Anglo law for something the community had already decided was finished. She will not forget that." },
+          { star: 'esperanza', passion: 'coalition',  delta: -10, why: "The families will hear you went to the territorial office about one of their own." },
+          { star: 'whitmore',  passion: 'standing',   delta: +5,  why: "A settler who cooperates with federal authority is a settler the railroad can work with." },
+        ],
+        fameEffects:   { esperanza: 0,  solomon: 0,  whitmore: +6 },
+        infamyEffects: { esperanza: +8, solomon: +8, whitmore: 0  },
+        logHeadline: 'MAN DETAINED ON VALLEY ROAD — Territorial office cites outstanding warrant.',
+        logBody: 'A man detained on the valley road by territorial officers has been identified as the subject of a warrant issued some years prior. He was taken south under escort.',
+        echoDef: null,
+      },
+    ],
+  },
+  {
+    id: 'mountain_man',
+    weight: 9,
+    // No gate — appears to anyone
+    name: 'Jedidiah Carp',
+    role: 'Trapper. Sierra Nevada. Long Time Out.',
+    arrival: "He comes down from the mountains in late autumn smelling like everything that lives up there. He's been working the eastern Sierra for two seasons and has a winter's worth of pelts and something else: a surveyor's map he found on a dead man in a northern pass. The map shows a route through the mountains that doesn't appear on any railroad filing. He doesn't know what he has. You do.",
+    moral: '"A man that hath friends must show himself friendly." — Proverbs 18:24',
+    choices: [
+      {
+        id: 'buy_the_map',
+        label: 'Buy the Map',
+        desc: "You pay him a fair price. He's satisfied. You now hold something Whitmore doesn't know exists.",
+        homesteadNote: 'Bought a survey map off a mountain man. Came down from the northern pass. Did not say where I got it.',
+        effects: [
+          { star: 'whitmore',  passion: 'corridor', delta: -8,  why: "Information he should have is now in your hands instead." },
+          { star: 'esperanza', passion: 'land',     delta: +8,  why: "A route through the northern pass that the railroad hasn't filed on is something she can use." },
+        ],
+        fameEffects:   { esperanza: +5, solomon: 0, whitmore: 0 },
+        infamyEffects: { esperanza: 0,  solomon: 0, whitmore: 0 },
+        logHeadline: 'TRAPPER PASSES THROUGH VALLEY — Winter supply stop.',
+        logBody: 'A fur trapper passing through the valley crossroads stopped to resupply before heading south. No further details reported.',
+        echoDef: null,
+      },
+      {
+        id: 'send_to_whitmore',
+        label: 'Point Him Toward Whitmore',
+        desc: "You tell him the railroad man will pay more. Whitmore gets the map.",
+        homesteadNote: 'Sent a mountain man with a survey map to Whitmore. Did not ask to see it first.',
+        effects: [
+          { star: 'whitmore', passion: 'corridor', delta: +12, why: "An unmapped pass through the northern Sierra is exactly what the railroad needs." },
+          { star: 'whitmore', passion: 'standing', delta: +5,  why: "You brought him something useful without being asked. He will note that." },
+        ],
+        fameEffects:   { esperanza: 0, solomon: 0, whitmore: +8 },
+        infamyEffects: { esperanza: 0, solomon: 0, whitmore: 0  },
+        logHeadline: 'TRAPPER MEETS WITH RAILROAD SURVEYOR — Details undisclosed.',
+        logBody: 'A fur trapper recently arrived from the Sierra Nevada was observed in conversation with J.T. Whitmore of Pacific Railroad. No statement was issued.',
+        echoDef: { years: 4, dateline: 'Pacific Railroad Bulletin · Sacramento', headline: 'NORTHERN PASS ROUTE CONFIRMED — Survey work advances ahead of schedule.', body: 'Pacific Railroad has confirmed the viability of a northern pass route through the Sierra Nevada, citing new survey intelligence obtained through field sources. The corridor timeline has been advanced by two years.' },
+      },
+      {
+        id: 'say_nothing_map',
+        label: 'Feed Him and Send Him South',
+        desc: "You give him a meal and directions to the trading post. The map stays with him.",
+        homesteadNote: 'Mountain man stopped through. Good company. Sent him to Solomon\'s post.',
+        effects: [
+          { star: 'solomon', passion: 'roots', delta: +5, why: "You sent a traveler with useful trade goods to the post. That kind of referral matters." },
+        ],
+        fameEffects:   { esperanza: 0, solomon: +5, whitmore: 0 },
+        infamyEffects: { esperanza: 0, solomon: 0,  whitmore: 0 },
+        logHeadline: 'TRAPPER PASSES THROUGH — No report.',
+        logBody: 'Nothing of note.',
+        echoDef: null,
+      },
+    ],
+  },
+  {
+    id: 'snake_oil',
+    weight: 7,
+    // No gate
+    name: 'Professor Aurelius Crane',
+    role: 'Medicine and Improvement. One Week Only.',
+    arrival: "He sets up a wagon at the crossroads with painted signs in English and Spanish and begins drawing a crowd. His preparations treat everything: dysentery, rheumatism, difficult labors, grief. The Californio families are buying. Some of them can't afford to be buying. His remedies are alcohol and camphor in a brown bottle with a label that cost more than the contents. He will be gone by Sunday. The question is whether you say anything before then.",
+    moral: '"Thou shalt not bear false witness against thy neighbour." — Exodus 20:16',
+    choices: [
+      {
+        id: 'warn_quietly',
+        label: 'Warn the Families Quietly',
+        desc: "You go door to door among the Californio families. By the third day his sales have dried up. He packs early.",
+        homesteadNote: 'Warned the valley families about the medicine man. He left early.',
+        effects: [
+          { star: 'esperanza', passion: 'trust',      delta: +10, why: "You protected the families without making a public scene. That's the kind of action she has been watching for." },
+          { star: 'esperanza', passion: 'coalition',  delta: +8,  why: "The community will remember who went door to door for them." },
+        ],
+        fameEffects:   { esperanza: +10, solomon: +5, whitmore: 0 },
+        infamyEffects: { esperanza: 0,   solomon: 0,  whitmore: 0 },
+        logHeadline: 'MEDICINE WAGON DEPARTS EARLY — No statement from proprietor.',
+        logBody: 'A traveling medicine vendor who had been operating at the valley crossroads departed ahead of his announced schedule. No explanation was given.',
+        echoDef: null,
+      },
+      {
+        id: 'report_to_whitmore',
+        label: 'Report Him to the Territorial Office',
+        desc: "You file a complaint. He's escorted out by the week's end. It becomes a public matter.",
+        homesteadNote: 'Reported Professor Crane to the territorial office. He was removed.',
+        effects: [
+          { star: 'esperanza', passion: 'trust',    delta: -5,  why: "You went to Anglo law first instead of the community. The families would have preferred to handle it themselves." },
+          { star: 'whitmore',  passion: 'standing', delta: +5,  why: "A settler who uses official channels is one the federal apparatus can count on." },
+          { star: 'solomon',   passion: 'autonomy', delta: -5,  why: "Running to the territorial office is exactly the kind of reflex he's been watching for." },
+        ],
+        fameEffects:   { esperanza: 0, solomon: 0, whitmore: +5 },
+        infamyEffects: { esperanza: 0, solomon: +5, whitmore: 0 },
+        logHeadline: 'TERRITORIAL OFFICE REMOVES MEDICINE VENDOR — Operating without authorization.',
+        logBody: 'A vendor operating a medicine show at the valley crossroads was removed by territorial officers following a complaint. The vendor\'s preparations were confiscated.',
+        echoDef: null,
+      },
+      {
+        id: 'say_nothing_crane',
+        label: 'Say Nothing',
+        desc: "He takes the community's money and leaves Sunday as promised.",
+        homesteadNote: 'Professor Crane sold his remedies for a week and left. Said nothing.',
+        effects: [
+          { star: 'esperanza', passion: 'trust', delta: -8, why: "You watched and said nothing. She will hear about that." },
+        ],
+        fameEffects:   { esperanza: 0, solomon: 0, whitmore: 0 },
+        infamyEffects: { esperanza: +8, solomon: 0, whitmore: 0 },
+        logHeadline: 'MEDICINE SHOW CONCLUDES — Vendor departs Sunday as scheduled.',
+        logBody: 'Professor Aurelius Crane\'s traveling medicine exhibition concluded its week-long engagement at the valley crossroads. The vendor departed Sunday morning.',
+        echoDef: null,
+      },
+    ],
+  },
+  {
+    id: 'boy_alone',
+    weight: 8,
+    // No gate — can appear to anyone, the dilemma requires nothing of the relationship
+    name: 'A Boy on the Valley Road',
+    role: 'Alone. Heading West.',
+    arrival: "He is maybe ten years old, walking west on the valley road with a small pack and no explanation. He says his name is Thomas. He says he is going to his uncle in the coast settlements. He says it the way a child says something he has rehearsed. There is no uncle. You are fairly certain of this. The road west is thirty miles of open country with no shelter. He has cornbread and a canteen.",
+    moral: '"Defend the poor and fatherless: do justice to the afflicted and needy." — Psalm 82:3',
+    choices: [
+      {
+        id: 'take_him_in',
+        label: 'Take Him In for the Night',
+        desc: "You feed him and give him a place to sleep. In the morning you learn a little more about where he came from.",
+        homesteadNote: 'A boy alone on the valley road. Stayed one night. Left in better shape than he arrived.',
+        effects: [
+          { star: 'esperanza', passion: 'coalition', delta: +8,  why: "The valley families will hear about this. A crossroads that takes in children traveling alone is a crossroads worth having." },
+          { star: 'solomon',   passion: 'roots',     delta: +8,  why: "A valley where a child can find shelter is a valley worth building something in." },
+        ],
+        fameEffects:   { esperanza: +6, solomon: +6, whitmore: 0 },
+        infamyEffects: { esperanza: 0,  solomon: 0,  whitmore: 0 },
+        logHeadline: 'NO REPORT — Crossroads quiet.',
+        logBody: 'Nothing of note was reported at the valley crossroads.',
+        echoDef: null,
+      },
+      {
+        id: 'send_to_mission',
+        label: 'Send Him to the Mission',
+        desc: "You give him directions to the nearest mission and a coin for the road. It is the responsible thing.",
+        homesteadNote: 'Sent a boy alone on the road to the mission. Gave him a coin.',
+        effects: [
+          { star: 'esperanza', passion: 'coalition', delta: +3, why: "You did something. Not much, but something." },
+        ],
+        fameEffects:   { esperanza: +3, solomon: 0, whitmore: 0 },
+        infamyEffects: { esperanza: 0,  solomon: 0, whitmore: 0 },
+        logHeadline: 'NO REPORT.',
+        logBody: 'Nothing of note.',
+        echoDef: null,
+      },
+      {
+        id: 'send_him_on',
+        label: 'Send Him on His Way',
+        desc: "You tell him the road is straight and wish him well. He thanks you and goes.",
+        homesteadNote: 'A boy on the road. Sent him west. Did not ask questions.',
+        effects: [
+          { star: 'solomon', passion: 'roots', delta: -5, why: "A crossroads that sends a child alone into thirty miles of open country is not a crossroads that means anything." },
+        ],
+        fameEffects:   { esperanza: 0, solomon: 0, whitmore: 0 },
+        infamyEffects: { esperanza: 0, solomon: 0, whitmore: 0 },
+        logHeadline: 'NO REPORT.',
+        logBody: 'Nothing of note.',
+        echoDef: null,
+      },
+    ],
+  },
+  {
+    id: 'russian_trader',
+    weight: 7,
+    // No gate — Fort Ross traders appear in the valley before any relationship is established
+    name: 'Alexei Volkov',
+    role: 'Trader. Fort Ross. Heading South.',
+    arrival: "He comes from Fort Ross with a wagon of sea otter pelts and tools the valley hasn't seen before — Russian iron, good steel, things made to last in hard country. He speaks Spanish with a heavy accent and English with a heavier one. He wants to trade and he wants to know who the real powers in this valley are. He is mapping something, though he calls it conversation. The Russian Imperial Company's interest in California is not purely commercial and everyone knows it.",
+    moral: '"A good name is rather to be chosen than great riches." — Proverbs 22:1',
+    choices: [
+      {
+        id: 'trade_fairly',
+        label: 'Trade Fairly and Say Little',
+        desc: "You buy what you need at fair prices and answer his questions with what anyone would know.",
+        homesteadNote: 'Russian trader from Fort Ross. Bought steel and tools. Told him nothing useful.',
+        effects: [
+          { star: 'solomon',  passion: 'roots',    delta: +6,  why: "Good tools at fair prices benefit the post and everyone connected to it." },
+          { star: 'whitmore', passion: 'corridor', delta: +4,  why: "A settler who keeps his dealings with foreign agents unremarkable is one less problem for the federal filing." },
+        ],
+        fameEffects:   { esperanza: 0, solomon: +5, whitmore: +3 },
+        infamyEffects: { esperanza: 0, solomon: 0,  whitmore: 0  },
+        logHeadline: 'RUSSIAN TRADER PASSES THROUGH — Commercial visit reported.',
+        logBody: 'A trader representing interests from the Russian settlement at Fort Ross conducted commercial business at the valley crossroads before continuing south.',
+        echoDef: null,
+      },
+      {
+        id: 'introduce_esperanza',
+        label: 'Introduce Him to Esperanza',
+        desc: "The Californio families and the Russians have a shared interest in keeping the Americans from consolidating California too quickly. You make the introduction.",
+        homesteadNote: 'Introduced the Fort Ross trader to Esperanza Vallejo. Did not stay for the conversation.',
+        effects: [
+          { star: 'esperanza', passion: 'coalition',  delta: +10, why: "A foreign power with adjacent territorial claims is a useful relationship for the coalition." },
+          { star: 'esperanza', passion: 'trust',      delta: +6,  why: "You brought her something with real political weight. She will remember it." },
+          { star: 'whitmore',  passion: 'corridor',   delta: -8,  why: "A settler facilitating contact between Californio families and Russian Imperial agents is a problem the federal filing will have to account for." },
+        ],
+        fameEffects:   { esperanza: +10, solomon: 0, whitmore: 0  },
+        infamyEffects: { esperanza: 0,   solomon: 0, whitmore: +8 },
+        logHeadline: 'RUSSIAN AGENT MEETS WITH VALLEJO FAMILY — Nature of meeting undisclosed.',
+        logBody: 'A representative of the Russian Imperial-American Company met with members of the Vallejo land grant family during a commercial visit to the valley. The substance of the meeting was not reported.',
+        echoDef: { years: 5, dateline: 'Alta California · San Francisco', headline: 'FORT ROSS SOLD TO SUTTER — Russian presence in California ends.', body: 'The Russian Imperial-American Company has sold Fort Ross and all associated California holdings to John Sutter. The transaction ends nearly three decades of Russian commercial and territorial presence in Alta California. The Californio families who had dealings with the Russian settlement are watching what replaces it.' },
+      },
+      {
+        id: 'turn_him_away',
+        label: 'Tell Him the Valley Is Settled',
+        desc: "You are polite but clear. He is not welcome to conduct business here. He goes south without stopping.",
+        homesteadNote: 'Turned away the Fort Ross trader. Told him the valley had what it needed.',
+        effects: [
+          { star: 'whitmore', passion: 'standing', delta: +6,  why: "A settler who turns away Russian commercial agents without incident is one the company can trust near the federal corridor." },
+          { star: 'solomon',  passion: 'roots',    delta: -5,  why: "Russian steel was good steel. Refusing trade the valley could use is not what a man building something permanent does." },
+        ],
+        fameEffects:   { esperanza: 0, solomon: 0, whitmore: +5 },
+        infamyEffects: { esperanza: 0, solomon: 0, whitmore: 0  },
+        logHeadline: 'RUSSIAN TRADER BYPASSES VALLEY — Continues south.',
+        logBody: 'A trader from the Fort Ross settlement passed through the valley without conducting business, continuing south toward Monterey.',
+        echoDef: null,
+      },
+    ],
+  },
 ];
-
-// ─── WORLD DISPATCHES ─────────────────────────────────────────────────────────
 // Historical texture that arrives regardless of player action.
 // Fire in the Spring of their target year.
 
@@ -1593,8 +1987,6 @@ const WIN_CONDITIONS = [
     prompt: "All three Stars are well-disposed toward you. Esperanza, Solomon, and Whitmore each hold you in genuine regard. The valley is stable. You could close the ledger here.",
     acceptLabel: 'Bring the Valley Together',
     body: "Three people who had every reason to work against each other — and against you — have chosen not to. Esperanza's grant is secure. Solomon's post is a valley institution. Whitmore has what the railroad sent him for, and it didn't cost the valley everything. You navigated the distance between them without harming any of them in the process. That's not luck. Just the result of careful decisions.\n\nThe ledger is full. The valley remembers what you built here.",
-    chronicleHeadline: 'A SEASON OF UNUSUAL ACCORD — Landholder credited with brokering lasting valley peace.',
-    chronicleBody: "In a valley that has known surveyor disputes, coalition grievances, and federal entanglement, a local landowner has somehow left all three parties in better standing than they arrived. Esperanza Vallejo, Solomon Reed, and J.T. Whitmore were each reached for comment. Each declined, in their own way, to say anything that diminished it.",
     declineHeadline: 'AN UNUSUAL SEASON PASSES WITHOUT CEREMONY — The arrangement holds. No names attached.',
     declineBody: "The valley is, for the moment, at something resembling peace. The three parties with the most to gain from conflict have chosen, this season, not to pursue it. No formal record was made of the arrangement. The paper notes only its absence from the docket.",
   },
@@ -1602,15 +1994,13 @@ const WIN_CONDITIONS = [
     id: 'win_hard_bargain',
     condition: (stars) => {
       const vals = Object.values(stars).map(s => effectiveMP(s)).sort((a, b) => b - a);
-      return vals[0] >= 75 && vals[1] >= 75 && vals[2] >= 15;
+      return vals[0] >= 150 && vals[1] >= 150 && vals[2] >= -15;
     },
     headline: 'TWO ALLIES AND A COLD PEACE',
     subhead: 'Hard-Driven Bargain',
     prompt: "Two of the Stars hold you in deep trust. The third is neutral — not an enemy, not a friend. You have taken sides and it shows. You could call this a victory.",
     acceptLabel: 'Seal the Bargain',
     body: "You didn't make everyone happy. You made the people who mattered most deeply loyal, and you kept the third from becoming an enemy. That's a different kind of achievement — it requires knowing what you're willing to sacrifice and holding the line on it. The relationship that stayed cold knows what it is. So do you.\n\nThis is what it looks like to win something that costs something. The valley is not at peace. It is in balance. You are the reason.",
-    chronicleHeadline: 'VALLEY INTERESTS FIND UNEASY ALIGNMENT — Two deep alliances hold. Third party maintains distance.',
-    chronicleBody: "The valley has settled into an arrangement that most considered impossible: two of its most significant actors firmly allied with the local landholder, the third maintaining a cautious distance rather than outright opposition. How long the balance holds is a question for another season.",
     declineHeadline: 'VALLEY BALANCE HOLDS — Two alliances intact. One party watching from a distance.',
     declineBody: "The alignment of interests in the valley remains as it has been. Two parties closely tied to the local landholder; one at arm's length. No formal change was recorded this season. The question of how long such arrangements hold without being named is one the paper declines to answer.",
   },
@@ -1618,15 +2008,13 @@ const WIN_CONDITIONS = [
     id: 'win_dominant_power',
     condition: (stars) => {
       const vals = Object.values(stars).map(s => effectiveMP(s));
-      return vals.some(v => v >= 200) && vals.every(v => v >= -15);
+      return vals.some(v => v >= 150) && vals.every(v => v >= -15);
     },
     headline: 'THE VALLEY IS YOURS',
     subhead: 'Dominant Power',
     prompt: "One Star's loyalty to you is absolute. The other two have calculated that working against you costs more than it's worth. The valley moves around you. You could close on this.",
     acceptLabel: 'Claim the Valley',
     body: "One of them would do almost anything for you. The other two have decided that opposing you costs more than it's worth. You didn't build consensus — you built gravity. Everything in the valley moves in relation to where you stand.\n\nThis is not the same as peace. It is precedence. The valley will remember the shape of what you made here long after the particulars are forgotten.",
-    chronicleHeadline: 'VALLEY LANDHOLDER EMERGES AS DOMINANT INTEREST — Others align or step aside.',
-    chronicleBody: "It is difficult to say when exactly the balance shifted. The filing histories suggest it happened gradually, then decisively. One party is firmly in partnership. The others have chosen, each in their own calculation, that the cost of opposition exceeds the benefit. The valley road runs through one name now.",
     declineHeadline: 'VALLEY ROAD RUNS THROUGH ONE NAME — No formal consolidation. The weight is there regardless.',
     declineBody: "The commercial and legal gravity of the valley continues to concentrate. No announcement was made. None was needed. The other parties are present and accounted for. They have simply stopped contesting the direction of things.",
   },
@@ -1651,11 +2039,17 @@ function seasonsRemaining(year, season, expires, expiresSeason) {
   return Math.max(0, expiryTick - (year * 4 + SEASON_IDX[season]));
 }
 
-function applyE(stars, effects) {
+function applyE(stars, effects, mods = null) {
   const s = dc(stars);
-  for (const e of effects)
-    if (s[e.star]?.passions[e.passion])
-      s[e.star].passions[e.passion].value = clamp(s[e.star].passions[e.passion].value + e.delta);
+  for (const e of effects) {
+    if (!s[e.star]?.passions[e.passion]) continue;
+    let delta = e.delta;
+    // Apply passion bonus from modifiers — only on positive gains, only from source Star's modifiers
+    if (mods && delta > 0 && mods[e.star]) {
+      delta = delta + (mods[e.star].passionBonus ?? 0);
+    }
+    s[e.star].passions[e.passion].value = clamp(s[e.star].passions[e.passion].value + delta);
+  }
   return s;
 }
 // ─── DERIVED FAME / INFAMY ────────────────────────────────────────────────────
@@ -1671,7 +2065,7 @@ function applyE(stars, effects) {
 //
 // applyFI remains for convergence/reactive events that use authored fameEffects.
 
-function applyFIFromEffects(stars, effects, tick = null) {
+function applyFIFromEffects(stars, effects, tick = null, mods = null) {
   const s = dc(stars);
   const lo = 0, hi = 100;
 
@@ -1688,13 +2082,17 @@ function applyFIFromEffects(stars, effects, tick = null) {
     const weightedAvg = sumDeltas / passionCount;
     if (weightedAvg === 0) continue;
 
+    // Apply fame/infamy multipliers from modifiers
+    const fameMult   = mods?.[starId]?.fameMult   ?? 1.0;
+    const infamyMult = mods?.[starId]?.infamyMult ?? 1.0;
+
     if (weightedAvg > 0) {
       const modifier = 1 + (star.fame / 100);
-      star.fame = Math.round(Math.max(lo, Math.min(hi, star.fame + weightedAvg * modifier)));
+      star.fame = Math.round(Math.max(lo, Math.min(hi, star.fame + weightedAvg * modifier * fameMult)));
       if (tick) star.fameLastChanged = tick;
     } else {
       const modifier = 1 + (star.infamy / 100);
-      star.infamy = Math.round(Math.max(lo, Math.min(hi, star.infamy + Math.abs(weightedAvg) * modifier)));
+      star.infamy = Math.round(Math.max(lo, Math.min(hi, star.infamy + Math.abs(weightedAvg) * modifier * infamyMult)));
       if (tick) star.infamyLastChanged = tick;
     }
   }
@@ -1734,6 +2132,17 @@ function checkEvents(state, prevStars, newLog) {
     const crossed = ev.direction === 'above' ? (prev < ev.threshold && curr >= ev.threshold)
                                               : (prev > ev.threshold && curr <= ev.threshold);
     if (!crossed) continue;
+    // Macropassion gates — a single passion threshold alone isn't sufficient context.
+    // requiresMacropassion: minimum — positive unlocks require a warm overall relationship.
+    // requiresMacropassionMax: maximum — negative consequences require a cold one.
+    if (ev.requiresMacropassion !== undefined) {
+      const macro = macropassionValue(stars[ev.star].passions);
+      if (macro < ev.requiresMacropassion) continue;
+    }
+    if (ev.requiresMacropassionMax !== undefined) {
+      const macro = macropassionValue(stars[ev.star].passions);
+      if (macro > ev.requiresMacropassionMax) continue;
+    }
     fired.push(ev.id);
     if (ev.effects.length) stars = applyE(stars, ev.effects);
     stars = applyFI(stars, ev.fameEffects, ev.infamyEffects, `${state.year}-${state.season}`);
@@ -1754,7 +2163,7 @@ function checkEvents(state, prevStars, newLog) {
   for (const ev of CONVERGENCE_EVENTS) {
     if (fired.includes(ev.id)) continue;
     if (pending.find(p => p.id === ev.id)) continue;
-    if (!ev.condition(stars, state.taken)) continue;
+    if (!ev.condition(stars, state.taken, state)) continue;
     fired.push(ev.id);
     const resolvedBody = typeof ev.bodyFn === 'function' ? ev.bodyFn(state.taken, state.declined) : ev.body;
     const resolvedChoices = ev.choices.map(c => ({
@@ -1784,11 +2193,13 @@ const INIT = {
   pendingChoices: [],  // convergence events awaiting player resolution — shown as modal stack
   unlockedActions: [], // action IDs unlocked by reactive events, added to available pool
   seenActions: [],     // action IDs that have appeared in Decisions (used for ● New badge)
+  revealedStars: ['esperanza'],  // Esperanza present from tick 0; others added by ADVANCE
   revealedPassions: [],  // "starId:passionKey" strings permanently unlocked (hidden passions)
   pendingReveal: [],     // { key, year } objects queued for the PassionRevealModal
-  pendingIntros: ['esperanza'],  // Esperanza present from turn 1; Solomon and Whitmore queued by ADVANCE when their actions appear
-  pendingGuest: null,    // current GUESTS entry awaiting player response
+  pendingIntros: ['esperanza'],  // Esperanza intro fires on load; others queued when revealedStars gains new IDs
+  pendingGuest: null,    // current GUEST_POOL entry awaiting player response
   guestHistory: [],      // guest IDs already answered or departed unanswered
+  guestCooldown: 0,      // seasons since last guest departed — drives Poisson draw probability
   homesteadLog: [],      // Crossroads ledger entries { year, season, note }
   ruined: false, ruinHeadline: null, ruinReason: null,
   won: false, wonConditionId: null,
@@ -1819,8 +2230,8 @@ function reducer(state, action) {
       }
     }
 
-    let stars = applyE(state.stars, effects);
-    stars = applyFIFromEffects(stars, effects, `${state.year}-${state.season}`);
+    let stars = applyE(state.stars, effects, computeModifiers(state.stars));
+    stars = applyFIFromEffects(stars, effects, `${state.year}-${state.season}`, computeModifiers(state.stars));
     // Reputation-gated bonus effects — fire if player's rep state with the target Star
     // matches the required key at the moment the action is taken (checked pre-application).
     if (act.repBonus) {
@@ -1861,8 +2272,8 @@ function reducer(state, action) {
     // rather than static strings so the text varies based on prior actions taken.
     const choiceLabel = typeof choice.labelFn === 'function' ? choice.labelFn(state.taken, state.declined) : choice.label;
     const choiceDesc  = typeof choice.descFn  === 'function' ? choice.descFn(state.taken, state.declined)  : choice.desc;
-    let stars = applyE(state.stars, choice.effects);
-    stars = applyFIFromEffects(stars, choice.effects, `${state.year}-${state.season}`);
+    let stars = applyE(state.stars, choice.effects, computeModifiers(state.stars));
+    stars = applyFIFromEffects(stars, choice.effects, `${state.year}-${state.season}`, computeModifiers(state.stars));
     const entry = {
       id: `conv-${action.eventId}-${action.choiceId}`,
       year: state.year, season: state.season,
@@ -1962,20 +2373,49 @@ function reducer(state, action) {
       }
     }
 
-    // Passion neglect decay — relationships not actively tended lose ground slowly.
-    // For each Star, scan the last 8 log entries (roughly 2 years). If none involve
-    // that Star's effects, positive passions drift down by 1 point per season.
-    // Only positive passions decay (negative ones require active repair to shift).
-    // The floor is 0 — neglect can fully erode a relationship, but slowly.
+    // Passion decay — macropassion-gated, bidirectional, runs every season.
+    //
+    // Positive passions drift toward zero as macropassion falls.
+    // Negative passions drift toward zero as macropassion rises, floored at a threshold.
+    // The two sides mirror each other — allies forgive, enemies erode goodwill.
+    // All rates are halved from the design maximum to preserve the snowball effect
+    // and give the player time to respond before decay becomes irreversible.
+    //
+    //  Macropassion     Positive decay   Negative decay   Negative floor
+    //  ≥ 50             0                0.5/season       -15
+    //  ≥ 30             0.25/season      0.25/season      -30  (← Friendly Neighbor band)
+    //  ≥ 15             0.5/season       0.5/season       -50
+    //  -15 to 15        0.75/season      0.75/season      -50
+    //  ≤ -15            1.0/season       0                none (Clear Competitor+)
+    //  ≤ -30            2.0/season       0                none (Active Adversary+)
+
     for (const starId of Object.keys(stars)) {
-      const recentInteraction = state.log.slice(0, 8).some(
-        e => !e.isQuiet && !e.isDeferred && e.effects?.some(ef => ef.star === starId)
-      );
-      if (!recentInteraction) {
-        for (const passion of Object.values(stars[starId].passions)) {
-          if (passion.value > 0) {
-            passion.value = Math.max(0, passion.value - 1);
-          }
+      const macro = macropassionValue(stars[starId].passions);
+
+      let posRate = 0;   // how fast positive passions drift toward 0
+      let negRate = 0;   // how fast negative passions drift toward 0
+      let negFloor = null; // null = negative passions don't auto-repair
+
+      if (macro >= 50) {
+        posRate = 0;    negRate = 0.5;  negFloor = -15;
+      } else if (macro >= 30) {
+        posRate = 0.25; negRate = 0.25; negFloor = -30;
+      } else if (macro >= 15) {
+        posRate = 0.5;  negRate = 0.5;  negFloor = -50;
+      } else if (macro > -15) {
+        posRate = 0.75; negRate = 0.75; negFloor = -50;
+      } else if (macro > -30) {
+        posRate = 1.0;  negRate = 0;    negFloor = null;
+      } else {
+        posRate = 2.0;  negRate = 0;    negFloor = null;
+      }
+
+      for (const passion of Object.values(stars[starId].passions)) {
+        const v = passion.value;
+        if (v > 0 && posRate > 0) {
+          passion.value = Math.max(0, v - posRate);
+        } else if (v < 0 && negRate > 0 && negFloor !== null && v > negFloor) {
+          passion.value = Math.min(0, v + negRate);
         }
       }
     }
@@ -2003,10 +2443,60 @@ function reducer(state, action) {
       quietEntry = { id: `quiet-${state.year}-${state.season}`, year: state.year, season: state.season, headline: qs.h, body: qs.b, decision: null, effects: [], isDeferred: false, isQuiet: true, isReactive: false };
     }
 
-    // Surface next available guest for the incoming season
-    pendingGuest = GUESTS.find(g => g.ya <= nextYear && g.expires > nextYear && !guestHistory.includes(g.id)) || null;
+    // Poisson-style guest draw — probability increases each season without a guest,
+    // targeting roughly one visitor every 3–5 years (12–20 seasons).
+    // Base probability starts low and rises until a guest fires, then resets.
+    // Only draws if no guest is currently pending and the pool has unseen candidates.
+    const newGuestCooldown = state.pendingGuest ? state.guestCooldown : state.guestCooldown + 1;
+    if (!state.pendingGuest) {
+      const availableGuests = GUEST_POOL.filter(g => {
+        if (state.guestHistory.includes(g.id)) return false;
+        if (g.requiresMacropassion) {
+          const macro = macropassionValue(stars[g.requiresMacropassion.star]?.passions ?? {});
+          if (macro < g.requiresMacropassion.min) return false;
+        }
+        return true;
+      });
+      if (availableGuests.length > 0) {
+        // +1% per season, starting 2 seasons after the last guest departed.
+        // 0% chance the next season, 0% the season after, then climbs to ~100% at season 100.
+        const seasonsEligible = Math.max(0, newGuestCooldown - 2);
+        const drawProb = Math.min(1.0, seasonsEligible * 0.01);
+        if (Math.random() < drawProb) {
+          // Weighted random selection
+          const totalWeight = availableGuests.reduce((sum, g) => sum + (g.weight ?? 10), 0);
+          let roll = Math.random() * totalWeight;
+          for (const g of availableGuests) {
+            roll -= (g.weight ?? 10);
+            if (roll <= 0) { pendingGuest = g; break; }
+          }
+        }
+      }
+    } else {
+      pendingGuest = state.pendingGuest;
+    }
 
     const cTick = state.year * 4 + SEASON_IDX[state.season];
+    const nextTickVal = nextYear * 4 + SEASON_IDX[nextSeason];
+
+    // ── Star reveal — checks each star against ya tick or spawnCondition.
+    // Stars enter revealedStars when their ya/yaSeasonIdx tick is reached,
+    // OR when their spawnCondition(state) returns true.
+    // New reveals queue an intro modal. This is the authoritative source for
+    // Persons column visibility — not derived from actions.
+    const newlyRevealedStars = Object.values(stars).filter(star => {
+      if (state.revealedStars.includes(star.id)) return false;
+      const starTick = (star.ya != null ? star.ya : Infinity) * 4 + (star.yaSeasonIdx ?? 0);
+      const timeRevealed = starTick <= nextTickVal;
+      const conditionRevealed = typeof star.spawnCondition === 'function'
+        ? star.spawnCondition({ ...state, stars, year: nextYear, season: nextSeason })
+        : false;
+      return timeRevealed || conditionRevealed;
+    }).map(s => s.id);
+    const revealedStars = [...state.revealedStars, ...newlyRevealedStars];
+    const pendingIntros = [...state.pendingIntros, ...newlyRevealedStars.filter(
+      id => !state.pendingIntros.includes(id)
+    )];
     const allAvailable = [...ACTIONS, ...UNLOCKABLE_ACTIONS.filter(a => state.unlockedActions.includes(a.id))]
       .filter(a => !state.taken.includes(a.id) && !state.hiddenActions.includes(a.id)
         && (a.ya ?? 0) * 4 + (a.yaSeasonIdx ?? 0) <= cTick
@@ -2014,7 +2504,10 @@ function reducer(state, action) {
         && (!a.requiresPassionVisible || isPassionVisible(stars, a.requiresPassionVisible.star, a.requiresPassionVisible.passion, state.revealedPassions))
         && (!a.requiresTaken || (state.taken.includes(a.requiresTaken) && !state.declined.includes(a.requiresTaken)))
         && (!a.requiresPassionBelow || (stars[a.requiresPassionBelow.star]?.passions[a.requiresPassionBelow.passion]?.value ?? 0) <= a.requiresPassionBelow.threshold)
-        && (!a.requiresPassionAbove || (stars[a.requiresPassionAbove.star]?.passions[a.requiresPassionAbove.passion]?.value ?? 0) >= a.requiresPassionAbove.threshold))
+        && (!a.requiresPassionAbove || (stars[a.requiresPassionAbove.star]?.passions[a.requiresPassionAbove.passion]?.value ?? 0) >= a.requiresPassionAbove.threshold)
+        // Sworn Enemy blackout — a Star who has decided against you stops making requests.
+        // Reparation-type actions are exempt: you can always attempt repair, even with a Sworn Enemy.
+        && (!a.source || a.msgType === 'Reparation' || macropassionValue(stars[a.source]?.passions ?? {}) > -75))
       .map(a => a.id);
     const seenActions = [...new Set([...state.seenActions, ...allAvailable])];
 
@@ -2022,28 +2515,9 @@ function reducer(state, action) {
     const newlyRevealed = revealedPassions.filter(k => !state.revealedPassions.includes(k));
     const pendingReveal = [...state.pendingReveal, ...newlyRevealed.map(k => ({ key: k, year: state.year }))];
 
-    // Star intro queuing — fires when a star's actions first appear in the *incoming* season.
-    // Uses nextYear/nextSeason tick so the intro lands the same turn as the action.
-    const nextTick = nextYear * 4 + SEASON_IDX[nextSeason];
-    const nextAvailable = [...ACTIONS, ...UNLOCKABLE_ACTIONS.filter(a => state.unlockedActions.includes(a.id))]
-      .filter(a => !state.taken.includes(a.id) && !state.hiddenActions.includes(a.id)
-        && (a.ya ?? 0) * 4 + (a.yaSeasonIdx ?? 0) <= nextTick
-        && (!a.expires || a.expires * 4 + (a.expiresSeason ? SEASON_IDX[a.expiresSeason] : 0) > nextTick))
-      .map(a => a.id);
-    const newStarSources = [...new Set(nextAvailable.map(id => {
-      const act = [...ACTIONS, ...UNLOCKABLE_ACTIONS].find(a => a.id === id);
-      return act?.source;
-    }).filter(Boolean))];
-    const prevStarSources = [...new Set([...state.seenActions, ...allAvailable].map(id => {
-      const act = [...ACTIONS, ...UNLOCKABLE_ACTIONS].find(a => a.id === id);
-      return act?.source;
-    }).filter(Boolean))];
-    const newIntroStars = newStarSources.filter(
-      id => !prevStarSources.includes(id) && !state.pendingIntros.includes(id)
-    );
-    const pendingIntros = [...state.pendingIntros, ...newIntroStars];
+    // pendingIntros is now driven by revealedStars (computed above) — no action-derived queuing needed.
 
-    const next = { ...state, year: nextYear, season: nextSeason, stars, taken: newTaken, declined: newDeclined, deferred: remaining, quietCount: state.quietCount + (quietEntry ? 1 : 0), seenActions, pendingGuest, guestHistory, homesteadLog, firedEvents: updatedFiredEvents, revealedPassions, pendingReveal, hiddenActions: state.hiddenActions, decisionTick: newDecisionTick, pendingIntros };
+    const next = { ...state, year: nextYear, season: nextSeason, stars, taken: newTaken, declined: newDeclined, deferred: remaining, quietCount: state.quietCount + (quietEntry ? 1 : 0), seenActions, pendingGuest, guestHistory, homesteadLog, firedEvents: updatedFiredEvents, revealedPassions, pendingReveal, hiddenActions: state.hiddenActions, decisionTick: newDecisionTick, pendingIntros, revealedStars, guestCooldown: pendingGuest && !state.pendingGuest ? 0 : newGuestCooldown };
     const afterEvents = checkWin(checkRuin(checkEvents({ ...next, log: [...newEntries, ...(quietEntry ? [quietEntry] : []), ...state.log] }, prevStars, [])));
     // Obscurity check — if the player has been inactive for 10 seasons and the game
     // hasn't already ended, the world closes around the absence.
@@ -2053,12 +2527,12 @@ function reducer(state, action) {
     return afterEvents;
   }
   if (action.type === 'GUEST_CHOOSE') {
-    const guest = GUESTS.find(g => g.id === action.guestId);
+    const guest = GUEST_POOL.find(g => g.id === action.guestId);
     const choice = guest?.choices.find(c => c.id === action.choiceId);
     if (!guest || !choice) return state;
     const prevStars = state.stars;
-    let stars = applyE(state.stars, choice.effects);
-    stars = applyFIFromEffects(stars, choice.effects, `${state.year}-${state.season}`);
+    let stars = applyE(state.stars, choice.effects, computeModifiers(state.stars));
+    stars = applyFIFromEffects(stars, choice.effects, `${state.year}-${state.season}`, computeModifiers(state.stars));
     const entry = {
       id: `guest-${action.guestId}-${action.choiceId}-${state.year}`,
       year: state.year, season: state.season,
@@ -2074,7 +2548,7 @@ function reducer(state, action) {
     const revealedPassions = checkPassionReveals(stars, state.revealedPassions);
     const newlyRevealed = revealedPassions.filter(k => !state.revealedPassions.includes(k));
     const pendingReveal = [...state.pendingReveal, ...newlyRevealed.map(k => ({ key: k, year: state.year }))];
-    const next = { ...state, stars, pendingGuest: null, guestHistory: [...state.guestHistory, action.guestId], homesteadLog, deferred, revealedPassions, pendingReveal };
+    const next = { ...state, stars, pendingGuest: null, guestHistory: [...state.guestHistory, action.guestId], homesteadLog, deferred, revealedPassions, pendingReveal, guestCooldown: 0 };
     return checkWin(checkRuin(checkEvents({ ...next, log: [entry, ...state.log] }, prevStars, [])));
   }
   if (action.type === 'DISMISS_REVEAL') {
@@ -2210,11 +2684,6 @@ function PassionBar({ passionKey, p, color }) {
       <div style={{ position: 'relative', height: 6, background: barBg, borderRadius: T.radiusSm, overflow: 'visible' }}>
         <div style={{ position: 'absolute', left: fillLeft, width: fillWidth, top: 0, bottom: 0, background: fillColor, transition: 'all 0.6s ease', zIndex: 3 }} />
       </div>
-      {behavior && (
-        <div style={{ fontSize: T.fsSm, color: T.inkWhy, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', marginTop: 3, lineHeight: T.lhSnug, borderLeft: `2px solid ${tCol}44`, paddingLeft: 5 }}>
-          {behavior}
-        </div>
-      )}
     </div>
   );
 }
@@ -2436,27 +2905,29 @@ function ActionCard({ act, stars, dispatch, revealed, revealedPassions, isNew, y
                 const star    = stars[e.star];
                 const passion = star?.passions[e.passion];
                 const ben     = e.delta > 0;
-                const crossing = passion ? thresholdCrossing(passion.value, e.delta, passion) : null;
+                const vis     = effectVisibility(act.source, e.star, stars);
+                const showDelta = vis === 'full';
+                const crossing = (showDelta && passion) ? thresholdCrossing(passion.value, e.delta, passion) : null;
                 return (
                   <div key={i} style={{ marginBottom: 8, paddingBottom: 8, borderBottom: i < arr.length - 1 ? `1px solid ${T.bdrSub}` : 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: T.gapSm, marginBottom: 3 }}>
                       <span style={{ color: star?.color, fontSize: T.fsXxs }}>◆</span>
                       <span style={{ flex: 1, fontFamily: "'Courier Prime', monospace", fontSize: T.fsMd }}>
                         <span style={{ color: T.inkMid }}>{star?.name?.split(' ')[0]} · </span>
-                        <span style={{ color: ben ? '#4a8e42' : '#9a3020', fontWeight: 700 }}>{passion?.label}{deltaSymbol(e.delta)}</span>
+                        {showDelta
+                          ? <span style={{ color: ben ? '#4a8e42' : '#9a3020', fontWeight: 700 }}>{passion?.label}{deltaSymbol(e.delta)}</span>
+                          : <span style={{ color: T.inkDim }}>{passion?.label} <span style={{ opacity: 0.35, fontSize: T.fsXxs }}>——</span></span>
+                        }
                       </span>
                     </div>
                     <div style={{ fontSize: T.fsSm, color: T.inkWhy, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: T.lhSnug, paddingLeft: 12 }}>{e.why}</div>
                     {crossing && (
                       <div style={{ marginTop: 5, paddingLeft: 12 }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: `${crossing.color}18`, border: `1px solid ${crossing.color}44`, borderRadius: T.radius, padding: '2px 6px', marginBottom: crossing.behavior ? 3 : 0 }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: `${crossing.color}18`, border: `1px solid ${crossing.color}44`, borderRadius: T.radius, padding: '2px 6px' }}>
                           <span style={{ fontSize: T.fsXxs, color: crossing.color, letterSpacing: T.lsMd, textTransform: 'uppercase', fontFamily: "'Courier Prime', monospace" }}>
                             Outlook on {passion?.label} becomes {crossing.label}
                           </span>
                         </div>
-                        {crossing.behavior && (
-                          <div style={{ fontSize: T.fsSm, color: crossing.color, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: T.lhSnug, opacity: 0.85 }}>{crossing.behavior}</div>
-                        )}
                       </div>
                     )}
                   </div>
@@ -3074,16 +3545,10 @@ export default function ManifestGame() {
     if (bNew !== aNew) return bNew - aNew;
     return (b.ya ?? 0) - (a.ya ?? 0);
   });
-  // revealed — star IDs shown in the Persons column and in Chronicle effect rows.
-  // A star becomes visible as soon as any of their source actions enters the timeline,
-  // whether or not the player has taken it. Unlockable actions that are in
-  // state.unlockedActions are also included so their star surfaces immediately on unlock.
-  const revealed = [...new Set(
-    allActions.filter(a => {
-      const cTick = state.year * 4 + SEASON_IDX[state.season];
-      return (a.ya ?? 0) * 4 + (a.yaSeasonIdx ?? 0) <= cTick || state.unlockedActions.includes(a.id);
-    }).map(a => a.source).filter(Boolean)
-  )];
+  // revealed — authoritative list of star IDs visible to the player.
+  // Now driven by state.revealedStars, which is populated in ADVANCE when a Star's
+  // ya tick is reached or their spawnCondition fires. No longer derived from actions.
+  const revealed = state.revealedStars;
 
   const SEASONS_LIST = ['Spring', 'Summer', 'Autumn', 'Winter'];
   const nextSeasonIdx = (SEASONS_LIST.indexOf(state.season) + 1) % SEASONS_LIST.length;
