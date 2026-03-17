@@ -27,7 +27,7 @@ const SCENARIO = {
   timeUnitLabel: 'Season',
 
   // UI labels
-  panelStars:     'Persons of Interest',
+  panelStars:     'Personal Relationships',
   panelDecisions: 'Matters Requiring Decision',
   chronicleHeader: (paperName) => `${paperName} — Chronicle`,
   emptyLedger:    'The ledger is empty.\n\nYou have land, some money, and a series of obligations not yet named.',
@@ -116,13 +116,49 @@ function mkT(dm) {
 //   50–100: 0.50 points/season
 //
 // Effective Standing: integrates MP with fame/infamy into one value used by ruin.
-//   effectiveMP = mpValue × modifier
-//   modifier = 1 + |fame - infamy| / 100
-//   if fame >= infamy: modifier amplifies (positive relevance strengthens relationship)
-//   if infamy > fame:  modifier = 1 / (1 + |netRelevance| / 100) — dampens toward zero
-//   For negative MP this means high infamy makes hostility worse; high fame softens it.
+//   For allies  (mp >= 0): effectiveMP = mp × (1 + fame/100) × (1 - infamy/100)
+//   For enemies (mp <  0): effectiveMP = mp × (1 + infamy/100) × (1 - fame/100)
+//
+//   Fame amplifies allies and dampens enemies.
+//   Infamy amplifies enemies and dampens allies.
+//   Each force is zeroed out at 100 on the opposing side.
 
-const FAME_BUFFER_RATIO = 0.80; // fame must be ≥ infamy × this to suppress infamy ruin
+// ─── UNIFIED RUIN / OBSCURITY CHECK ──────────────────────────────────────────
+// Classification uses raw macropassion — how they feel about you.
+// Cohesion is measured by effectiveMP — what they can actually do about it.
+//
+// allies  = Stars with macropassion > +15  (Cautious Friend or better)
+// enemies = Stars with macropassion < -15  (Clear Competitor or worse)
+// neutral = -15 to +15                     (excluded from both sides)
+//
+// allyCohesion  = mean(effectiveMP of allies)
+// enemyCohesion = mean(|effectiveMP| of enemies)
+//
+// RUIN fires when:      enemies exist AND enemyCohesion > allyCohesion
+// OBSCURITY fires when: decisionTick >= 20
+//   — suppressed if:    allies exist AND allyCohesion > enemyCohesion
+//   — becomes RUIN if:  enemyCohesion > allyCohesion at that moment
+//   — fires normally if: no allies AND no enemies (pure neutral)
+
+function ruinStrengths(stars) {
+  const starList = Object.values(stars);
+  const allies  = starList.filter(s => macropassionValue(s.passions) > 15);
+  const enemies = starList.filter(s => macropassionValue(s.passions) < -15);
+  const allyCohesion  = allies.length  ? allies.reduce((sum,s)  => sum + effectiveMP(s), 0)          / allies.length  : 0;
+  const enemyCohesion = enemies.length ? enemies.reduce((sum,s) => sum + Math.abs(effectiveMP(s)), 0) / enemies.length : 0;
+  return { allyCohesion, enemyCohesion, allies, enemies };
+}
+
+function isRuined(stars) {
+  const { allyCohesion, enemyCohesion, enemies } = ruinStrengths(stars);
+  return enemies.length > 0 && enemyCohesion > allyCohesion;
+}
+
+function isObscuritySuppressed(stars) {
+  const { allyCohesion, enemyCohesion, allies, enemies } = ruinStrengths(stars);
+  // Suppressed if allies exist and ally cohesion exceeds enemy cohesion
+  return allies.length > 0 && allyCohesion > enemyCohesion;
+}
 
 function decayRate(value) {
   if (value <= 30)  return 1.00;
@@ -130,20 +166,28 @@ function decayRate(value) {
   return 0.50;
 }
 
-// Ruin is suppressed (infamy path) when fame ≥ infamy × FAME_BUFFER_RATIO.
-function isRuinBuffered(star) {
-  return star.fame >= star.infamy * FAME_BUFFER_RATIO;
-}
-
-// Effective standing — MP weighted by political relevance.
-// Positive net relevance amplifies; negative net relevance dampens.
+// Effective standing — MP amplified by politically relevant pressure in its own direction.
+//
+// Fame and infamy are both positive amplifiers, but they act on opposite signs:
+//   fame  amplifies positive MP (ally strength) and dampens negative MP (enemy strength)
+//   infamy amplifies negative MP (enemy strength) and dampens positive MP (ally strength)
+//
+//   effectiveMP = mp × (1 + fame/100) × (1 - infamy/100)   when mp >= 0 (ally)
+//   effectiveMP = mp × (1 + infamy/100) × (1 - fame/100)   when mp <  0 (enemy)
+//
+// This means:
+//   An ally with high fame hits harder for you. High infamy softens them.
+//   An enemy with high infamy hits harder against you. High fame softens them.
+//   At infamy/fame = 100, the opposing force is fully zeroed out.
 function effectiveMP(star) {
   const mp = macropassionValue(star.passions);
-  const net = star.fame - star.infamy;
-  const modifier = net >= 0
-    ? 1 + Math.abs(net) / 100
-    : 1 / (1 + Math.abs(net) / 100);
-  return mp * modifier;
+  if (mp >= 0) {
+    // Ally path: fame amplifies, infamy dampens
+    return mp * (1 + star.fame / 100) * Math.max(0, 1 - star.infamy / 100);
+  } else {
+    // Enemy path: infamy amplifies magnitude, fame dampens it
+    return mp * (1 + star.infamy / 100) * Math.max(0, 1 - star.fame / 100);
+  }
 }
 
 // ─── THRESHOLD SYSTEM ────────────────────────────────────────────────────────
@@ -837,27 +881,130 @@ const ACTIONS = [
 ];
 
 // ─── QUIET SEASONS ────────────────────────────────────────────────────────────
+// Each entry: { h, b, requires? }
+// requires(state) — optional predicate. If present, entry only enters the pool
+// when it returns true. Allows entries gated on prior decisions, macropassion
+// levels, or year. Entries without requires are always eligible.
+// Selection: pool is filtered to eligible entries, then drawn sequentially by
+// season. When the seasonal pool is exhausted, falls back to QUIET_SEASONS_GENERIC.
+
 const QUIET_SEASONS_BY_SEASON = {
   Spring: [
-    { h: "SPRING PASSES WITHOUT INCIDENT",       b: "The valley road is muddy with snowmelt. No surveys are filed. No court dates are pending. You spend three weeks repairing fences and attending to correspondence that requires nothing of consequence." },
-    { h: "A QUIET SPRING ON THE LAND",            b: "The rains come and go without consequence. No riders arrive with letters. No surveyors on the road. You note the absence of urgency and are not sure what to make of it." },
+    { h: "SPRING PASSES WITHOUT INCIDENT",
+      b: "The valley road is muddy with snowmelt. No surveys are filed. No court dates are pending. You spend three weeks repairing fences and attending to correspondence that requires nothing of consequence." },
+    { h: "A QUIET SPRING ON THE LAND",
+      b: "The rains come and go without consequence. No riders arrive with letters. No surveyors on the road. You note the absence of urgency and are not sure what to make of it." },
+    { h: "SPRING PLANTING — THE VALLEY WORKS",
+      b: "The fields go in without drama. The Vallejo hands are out early; you can see them from the road. No one exchanges more than a nod. The work proceeds on its own schedule, indifferent to whatever is happening in Sacramento." },
+    { h: "A RIDER FROM THE SOUTH — NOTHING REQUIRING YOUR NAME",
+      b: "A territorial rider passes through heading north. He leaves no letters at your door. You watch him go and return to the fence line. Whatever he is carrying, it isn't addressed to you." },
+    // Gated: only after deed_esperanza is taken
+    { h: "THE VALLEJO PARCEL — QUIET FOR NOW",
+      b: "The boundary markers are undisturbed. No survey crew on the road. Whatever Whitmore's next move is, it hasn't arrived yet. Esperanza's name is on the record. The record holds.",
+      requires: (s) => s.taken.includes('deed_esperanza') },
+    // Gated: only after lend_solomon
+    { h: "SOLOMON'S POST — OPEN FOR THE SEASON",
+      b: "The post is doing a steady trade. You pass it on the way to the territorial road and note the new sign above the door — the expansion is visible from the outside now. Solomon is in the yard tallying freight. He lifts a hand as you pass. You lift one back.",
+      requires: (s) => s.taken.includes('lend_solomon') },
+    // Gated: year >= 1820
+    { h: "SPRING, AND THE TERRITORY KEEPS CHANGING",
+      b: "Another season. The land looks the same. The paperwork in Sacramento does not. New filings, new names on old parcels, new roads proposed on maps that don't reflect the ground. You note the gap between the territory on paper and the territory underfoot.",
+      requires: (s) => s.year >= 1820 },
   ],
   Summer: [
-    { h: "A QUIET SUMMER IN THE VALLEY",          b: "The heat comes early and stays. Whitmore's crew is not seen on the roads this month. Solomon's post is busy with travelers. You have time to think, which is its own kind of discomfort." },
-    { h: "MIDSUMMER — NO WORD FROM THE TERRITORY", b: "Nothing arrives by stage or rider that requires action. The valley bakes. You watch the road and wait for something that does not come." },
+    { h: "A QUIET SUMMER IN THE VALLEY",
+      b: "The heat comes early and stays. Whitmore's crew is not seen on the roads this month. Solomon's post is busy with travelers. You have time to think, which is its own kind of discomfort." },
+    { h: "MIDSUMMER — NO WORD FROM THE TERRITORY",
+      b: "Nothing arrives by stage or rider that requires action. The valley bakes. You watch the road and wait for something that does not come." },
+    { h: "THE ROAD IS DRY AND QUIET",
+      b: "Dust on the valley road. The stage runs twice a week. No one on it is coming to see you. You attend to the homestead and the accounts. The season passes without requiring a signature." },
+    { h: "HEAT AND SILENCE — NO SURVEYORS THIS MONTH",
+      b: "The survey crews have moved south for the season. The roads are clear. You use the weeks to attend to the homestead and to correspondence that requires nothing beyond a brief reply." },
+    // Gated: Whitmore is known and not an enemy
+    { h: "WHITMORE'S CREW ON THE FAR ROAD",
+      b: "You see the railroad survey crew in the distance, working the far slope. They are not on your parcel. They do not look up. Whatever Whitmore is mapping this season, it is not your immediate concern.",
+      requires: (s) => s.revealedStars.includes('whitmore') && macropassionValue(s.stars.whitmore?.passions ?? {}) > -15 },
+    // Gated: after introduce_caleb
+    { h: "CALEB REED ON THE ROAD NORTH",
+      b: "You pass Caleb Reed heading toward the Nevada route. He has the manner of a man who knows where he is going. Solomon's routes are working. The post is getting its legs. You exchange a few words about weather and road conditions. Nothing requiring decision.",
+      requires: (s) => s.taken.includes('introduce_caleb') },
+    // Gated: year >= 1825
+    { h: "MIDSUMMER — THE VALLEY HAS GROWN COMPLICATED",
+      b: "More people than a decade ago. More claims, more roads, more names. The valley that arrived with you is not quite the valley it is now. You attend to your parcel and your accounts. The complications are not, this season, yours.",
+      requires: (s) => s.year >= 1825 },
   ],
   Autumn: [
-    { h: "AUTUMN: NO WORD FROM SACRAMENTO",       b: "The leaves turn. The stage brings no letters requiring action. You attend a dinner at the Merchant's Association and say nothing of consequence to anyone." },
-    { h: "A STILL AUTUMN IN THE VALLEY",          b: "The harvest moves without incident. No filings, no summons, no visitors at the door. The quiet accumulates like sediment." },
+    { h: "AUTUMN: NO WORD FROM SACRAMENTO",
+      b: "The leaves turn. The stage brings no letters requiring action. You attend a dinner at the Merchant's Association and say nothing of consequence to anyone." },
+    { h: "A STILL AUTUMN IN THE VALLEY",
+      b: "The harvest moves without incident. No filings, no summons, no visitors at the door. The quiet accumulates like sediment." },
+    { h: "THE HARVEST ACCOUNTS — NOTHING UNUSUAL",
+      b: "The yield is what it was. The accounts close without drama. You write a brief summary for the territorial register and leave it on the stage. The season ends without requiring anything further of you." },
+    { h: "AUTUMN ROAD — THE MERCHANTS CLOSE THEIR LEDGERS",
+      b: "The trading season winds down. Solomon's post is stacking freight for winter storage. The Merchant's Association dinner was last week. You attended, said nothing memorable, and left before the second round." },
+    // Gated: after report_trespass
+    { h: "THE MAGISTRATE'S OFFICE — NO NEW FILINGS",
+      b: "You check at the territorial recorder's office. No new survey challenges on record. The trespass complaint is still logged. It has not been resolved, but it has not been overturned either. The silence is its own kind of answer.",
+      requires: (s) => s.taken.includes('report_trespass') },
+    // Gated: Esperanza is an ally
+    { h: "THE COALITION MEETS — YOU ARE NOT INVITED",
+      b: "Esperanza's coalition holds a meeting at the Vallejo parcel. You are not there. You don't need to be — that is the arrangement. The coalition does its work. You do yours. The season passes without requiring you to be in two places at once.",
+      requires: (s) => macropassionValue(s.stars.esperanza?.passions ?? {}) > 15 },
+    // Gated: after find_brother
+    { h: "WORD FROM NEVADA — THE ROUTES ARE OPEN",
+      b: "A letter arrives from Caleb Reed, forwarded through Solomon's post. The Nevada routes are clear for the season. Solomon is at the counter when you read it; he doesn't ask what it says. He already knows.",
+      requires: (s) => s.taken.includes('find_brother') },
+    // Gated: year >= 1830
+    { h: "AUTUMN, DECADES ON — THE TERRITORY HAS SETTLED INTO ITS SHAPE",
+      b: "You have been in this valley long enough to see the road repaired twice. The names on the parcels adjacent to yours have changed at least once each. The territorial map in the recorder's office looks different from the one that was there when you arrived. The harvest comes in regardless.",
+      requires: (s) => s.year >= 1830 },
   ],
   Winter: [
-    { h: "WINTER CLOSES THE PASSES",              b: "Snow on the northern route. Survey work is halted. Nothing needs to be done. You wait and watch the deferred things accumulate." },
-    { h: "WINTER — THE ROAD GOES QUIET",          b: "Nothing moves through the valley that wasn't already moving. You tend to small obligations and wait for the ground to thaw." },
+    { h: "WINTER CLOSES THE PASSES",
+      b: "Snow on the northern route. Survey work is halted. Nothing needs to be done. You wait and watch the deferred things accumulate." },
+    { h: "WINTER — THE ROAD GOES QUIET",
+      b: "Nothing moves through the valley that wasn't already moving. You tend to small obligations and wait for the ground to thaw." },
+    { h: "DEEP WINTER — THE ACCOUNTS ARE SETTLED",
+      b: "The ledgers close for the year. Nothing outstanding, nothing overdue. The homestead is maintained. The passes are impassable. You wait for spring with no particular urgency." },
+    { h: "WINTER ON THE LAND — NO RIDERS",
+      b: "Three weeks without a letter. The road carries freight but no messages addressed to you. You split wood, repair the barn door, and attend to the kind of work that accumulates when decisions don't." },
+    // Gated: Whitmore known
+    { h: "WHITMORE'S CREW WINTERS IN TOWN",
+      b: "The railroad survey crew has taken rooms at the Merchant's Inn for the cold months. They are not working. Whitmore himself was seen at the territorial recorder's office last week, but nothing has been filed under your parcel number. The winter holds.",
+      requires: (s) => s.revealedStars.includes('whitmore') },
+    // Gated: after federal_claim
+    { h: "THE RAILROAD PAPERWORK — FILED AND DORMANT",
+      b: "The federal corridor filing is in the record. Nothing has moved on it this season. The company's attorneys are in Sacramento; Whitmore is in the valley. You watch the gap between those two facts and wait for it to close.",
+      requires: (s) => s.taken.includes('federal_claim') },
+    // Gated: Solomon is ally
+    { h: "SOLOMON'S POST — CLOSED FOR THE SEASON",
+      b: "Reed's Trading Post shutters for deep winter. You pass the locked door on the valley road and note the freight stacked under canvas beside the barn. Solomon has prepared for a long close. The post will be ready in spring. So will you.",
+      requires: (s) => macropassionValue(s.stars.solomon?.passions ?? {}) > 15 },
+    // Gated: year >= 1835
+    { h: "ANOTHER WINTER — THE TERRITORY IS NOT WHAT IT WAS",
+      b: "You have seen this valley in every season now, many times over. The snow falls the same way. The road goes quiet the same way. The accounts close in the same columns. What has changed is everything around the edges — names, claims, roads, flags. You wait for spring.",
+      requires: (s) => s.year >= 1835 },
   ],
 };
+
 const QUIET_SEASONS_GENERIC = [
-  { h: "THE SEASON OFFERS NOTHING TO DECIDE",   b: "There are days when history moves without you. This appears to be one of them. The valley persists. The people in it persist. You note the quiet and are not certain whether to be grateful or suspicious." },
-  { h: "QUIET WEEKS ON THE LAND",               b: "No summons. No surveyors. No letters requiring a signature. The work of the land goes on. You begin to suspect the calm." },
+  { h: "THE SEASON OFFERS NOTHING TO DECIDE",
+    b: "There are days when history moves without you. This appears to be one of them. The valley persists. The people in it persist. You note the quiet and are not certain whether to be grateful or suspicious." },
+  { h: "QUIET WEEKS ON THE LAND",
+    b: "No summons. No surveyors. No letters requiring a signature. The work of the land goes on. You begin to suspect the calm." },
+  { h: "THE LEDGER IS CURRENT — NOTHING PENDING",
+    b: "All accounts settled. No actions outstanding. The valley is, for this season, attending to its own business without requiring yours. You find this neither reassuring nor alarming. It is simply the condition." },
+  { h: "A SEASON WITHOUT CONSEQUENCE",
+    b: "Some seasons have weight. This one does not. The decisions that will matter are either already made or not yet arrived. You maintain what you have built and wait for the territory to require something of you again." },
+  { h: "THE VALLEY KEEPS ITS OWN PACE",
+    b: "Nothing comes down the road addressed to you. The people who matter in this territory are attending to their own concerns. You do the same. The gap between your last decision and your next one stretches out like the valley road in dry summer." },
+  // Gated generics — these surface regardless of season when their condition is met
+  { h: "THE RECORDER'S OFFICE — NOTHING NEW UNDER YOUR NAME",
+    b: "You send a rider to check the territorial filing index. Nothing new on your parcel. Nothing new adjacent. The paper record of your presence in this valley is exactly as you left it. That is either reassuring or ominous depending on the week.",
+    requires: (s) => s.year >= 1818 },
+  { h: "THE STAGE PASSES — NOTHING FOR YOU",
+    b: "The weekly stage from Sacramento stops at Solomon's post, drops freight, takes on passengers. No letter addressed to your parcel. Whatever news is moving through the territory this season, it is not moving in your direction. You note the absence and return to the fence line.",
+    requires: (s) => s.revealedStars.includes('solomon') },
 ];
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -951,27 +1098,56 @@ function effectVisibility(sourceStarId, effectStarId, stars) {
 }
 
 // ─── MODIFIER COMPUTATION ─────────────────────────────────────────────────────
-// Computes active buffs/debuffs for each Star based on macropassion level and
-// dominant passion. Returns a modifiers object consumed by applyE, applyFI,
-// and action availability checks.
+// Macropassion band sets a ceiling on how far individual passions can contribute
+// their bonuses or penalties. The dominant passion (after capping) determines
+// which specific behavior is active.
 //
-// modifiers[starId] = {
-//   fameMult:    number  — multiplier on fame gains from actions touching this Star
-//   infamyMult:  number  — multiplier on infamy gains
-//   passionBonus: number — flat addition to positive passion gains
-//   deltaObscured: bool  — whether effect deltas are hidden in action cards
-//   auditStars:  Set     — star IDs whose actions are rate-limited this season
-// }
+// Positive side — macropassion band caps individual passion contribution at:
+//   15–30 (Cautious Friend)   → cap at +50 band
+//   30–50 (Friendly Neighbor) → cap at +75 band
+//   50–75 (Steadfast Friend)  → cap at +100 (fully unlocked)
+//   ≥ 75  (Bound Ally)        → cap at +100 (fully unlocked)
+//
+// Negative side mirrors exactly:
+//   -15 to -30 (Clear Competitor)  → cap at -50 band
+//   -30 to -50 (Open Opponent)     → cap at -75 band
+//   -50 to -75 (Active Adversary)  → cap at -100 (fully unlocked)
+//   ≤ -75 (Sworn Enemy)            → cap at -100 (fully unlocked)
+//
+// The capped dominant passion value is returned as cappedDomValue for tooltip
+// and active effects display.
+
+function passionBandCap(macro) {
+  if (macro >= 50)  return 100;
+  if (macro >= 30)  return 75;
+  if (macro >= 15)  return 50;
+  if (macro > -15)  return 0;   // neutral — no positive bonuses
+  if (macro > -30)  return -50;
+  if (macro > -50)  return -75;
+  return -100;
+}
+
 function computeModifiers(stars) {
   const mods = {};
   for (const starId of Object.keys(stars)) {
     const star = stars[starId];
     const macro = macropassionValue(star.passions);
+    const cap = passionBandCap(macro);
 
-    // Find dominant passion (highest absolute value)
-    const dominant = Object.entries(star.passions)
-      .reduce((a, [k, p]) => Math.abs(p.value) > Math.abs(a[1]) ? [k, p] : a, ['', { value: 0 }]);
-    const domValue = dominant[1].value ?? 0;
+    // Cap each passion's contribution at the band ceiling
+    // Positive passions capped at +cap; negative passions capped at cap (which is negative)
+    const cappedPassions = Object.entries(star.passions).map(([k, p]) => {
+      const v = p.value;
+      const capped = macro >= 0
+        ? Math.min(v, cap)           // positive side: cap upward contribution
+        : Math.max(v, cap);          // negative side: cap downward contribution
+      return [k, { ...p, value: capped }];
+    });
+
+    // Dominant passion after capping
+    const dominant = cappedPassions
+      .reduce((a, [k, p]) => Math.abs(p.value) > Math.abs(a[1].value) ? [k, p] : a, ['', { value: 0 }]);
+    const cappedDomValue = dominant[1].value ?? 0;
 
     let fameMult = 1.0;
     let infamyMult = 1.0;
@@ -979,34 +1155,26 @@ function computeModifiers(stars) {
     let deltaObscured = false;
 
     if (macro >= 75) {
-      // Bound Ally
       fameMult = 1.5; infamyMult = 0.5; passionBonus = 5;
     } else if (macro >= 50) {
-      // Steadfast Friend
       fameMult = 1.25; infamyMult = 0.75; passionBonus = 3;
     } else if (macro >= 30) {
-      // Friendly Neighbor
       fameMult = 1.1;
     } else if (macro >= 15) {
       // Cautious Friend — no modifiers yet
     } else if (macro > -15) {
-      // Known Acquaintance
       deltaObscured = true;
     } else if (macro > -30) {
-      // Clear Competitor
       fameMult = 0.75; infamyMult = 1.25; deltaObscured = true;
     } else if (macro > -50) {
-      // Open Opponent
-      fameMult = 0.5; infamyMult = 1.5; passionBonus = 0; deltaObscured = true;
+      fameMult = 0.5; infamyMult = 1.5; deltaObscured = true;
     } else if (macro > -75) {
-      // Active Adversary
       fameMult = 0.5; infamyMult = 2.0; deltaObscured = true;
     } else {
-      // Sworn Enemy
       fameMult = 0.25; infamyMult = 2.0; deltaObscured = true;
     }
 
-    mods[starId] = { fameMult, infamyMult, passionBonus, deltaObscured, macro, domValue };
+    mods[starId] = { fameMult, infamyMult, passionBonus, deltaObscured, macro, cappedDomValue, cap };
   }
   return mods;
 }
@@ -1884,30 +2052,19 @@ const WORLD_DISPATCHES = [
 ];
 
 // ─── RUIN CHECK ───────────────────────────────────────────────────────────────
-// Called after every state mutation. Returns state unchanged, or with ruined=true.
+// Unified effectiveMP-based comparison. Scales to any number of Stars.
+// allies  = Stars where effectiveMP > +15 (Cautious Friend or better)
+// enemies = Stars where effectiveMP < -15 (Clear Competitor or worse)
+// neutral = excluded from both sides
 //
-// Two ruin paths — both required to fire before the game ends:
-//
-// 1. INFAMY PATH (political) — a Star's infamy ≥ 65, unbuffered by fame.
-//    The valley's power structures have enough grievance and standing to act.
-//    Suppressed if fame ≥ infamy × FAME_BUFFER_RATIO (skin in the game).
-//    Also fires if two Stars both reach infamy ≥ 45 unbuffered.
-//
-// 2. EFFECTIVE STANDING PATH (personal × political) — uses effectiveMP(),
-//    which integrates macropassion with net fame/infamy relevance.
-//    - Conditional: effectiveMP ≤ -50 for any Star, fires unless the sum of
-//      all other Stars' effectiveMP ≥ 2 × |that Star's effectiveMP|.
-//    - Absolute: effectiveMP ≤ -100 for any Star, fires unconditionally.
-//
-// Ruin narratives are authored per Star. The effective standing paths use
-// dynamic text reflecting the combined personal + political collapse.
+// RUIN fires when: enemies exist AND mean(|enemy emp|) > mean(ally emp)
+// The dominant enemy (highest |emp|) provides the authored narrative.
 
 function checkRuin(state) {
   if (state.ruined) return state;
   const starList = Object.values(state.stars);
-  let ruinHeadline = null, ruinReason = null;
 
-  const ruinPaths = {
+  const ruinNarratives = {
     esperanza: {
       headline: 'THE VALLEY CLOSES ITS DOORS',
       reason: 'Esperanza Vallejo has named you before the full coalition. The Californio families have withdrawn credit, closed their roads, and filed a formal complaint with the territorial court. You are an enemy of the valley. There is no path forward from here.',
@@ -1922,101 +2079,86 @@ function checkRuin(state) {
     },
   };
 
-  // ── Infamy path ──
-  for (const star of starList) {
-    if (star.infamy >= 65 && !isRuinBuffered(star) && ruinPaths[star.id]) {
-      ({ headline: ruinHeadline, reason: ruinReason } = ruinPaths[star.id]);
-      break;
-    }
-  }
-  if (!ruinHeadline) {
-    const high = starList.filter(s => s.infamy >= 45 && !isRuinBuffered(s));
-    if (high.length >= 2) {
-      const names = high.slice(0, 2).map(s => s.name.split(' ')[0]).join(' and ');
-      ruinHeadline = 'TOO MANY ENEMIES — THE TERRITORY TURNS';
-      ruinReason = `${names} have both turned against you in earnest. This territory does not leave room for that many enemies at once. What you built here cannot be sustained. The homestead passes to other hands.`;
-    }
-  }
+  const { allyCohesion, enemyCohesion, enemies } = ruinStrengths(state.stars);
 
-  // ── Effective standing path ──
-  if (!ruinHeadline) {
-    for (const star of starList) {
-      const emp = effectiveMP(star);
+  if (enemies.length === 0 || enemyCohesion <= allyCohesion) return state;
 
-      // Absolute — no buffer possible
-      if (emp <= -100) {
-        ruinHeadline = ruinPaths[star.id]?.headline ?? `${star.name.split(' ')[0].toUpperCase()} — IRRECONCILABLE`;
-        ruinReason = ruinPaths[star.id]?.reason ?? `Every dimension of your relationship with ${star.name} has collapsed past the point where any alliance can hold it. They have made it their purpose to see you gone. The effort, sustained across seasons, succeeds.`;
-        break;
-      }
-
-      // Conditional — check if other Stars' combined effectiveMP provides cover
-      if (emp <= -50) {
-        const others = starList.filter(s => s.id !== star.id);
-        const otherSum = others.reduce((sum, s) => sum + effectiveMP(s), 0);
-        if (otherSum < Math.abs(emp) * 2) {
-          ruinHeadline = ruinPaths[star.id]?.headline ?? `${star.name.split(' ')[0].toUpperCase()} — MOVES AGAINST YOU`;
-          ruinReason = `${star.name}'s hostility toward you — personal and political — has reached the point of action. Your other alliances are not strong enough to make that action costly. ${ruinPaths[star.id]?.reason ?? 'The homestead passes to other hands.'}`;
-          break;
-        }
-      }
-    }
-  }
-
-  if (!ruinHeadline) return state;
+  // Ruin fires — dominant enemy provides the narrative
+  const dominant = enemies.reduce((a, b) => Math.abs(effectiveMP(a)) >= Math.abs(effectiveMP(b)) ? a : b);
+  const narrative = ruinNarratives[dominant.id];
+  const ruinHeadline = narrative?.headline ?? `${dominant.name.split(' ')[0].toUpperCase()} — MOVES AGAINST YOU`;
+  const ruinReason = narrative?.reason ?? `${dominant.name}'s hostility has reached the point of action. Your alliances are not strong enough to make that action costly. The homestead passes to other hands.`;
 
   return { ...state, ruined: true, ruinHeadline, ruinReason };
 }
 
+
 // ─── WIN CONDITIONS ───────────────────────────────────────────────────────────
-// Three paths to a closing — each fires once when thresholds are crossed.
-// Offered as a choice: Accept closes the ledger; Find Another Way records the
-// refusal in firedEvents and never resurfaces, even if thresholds hold.
+// Three closings, calibrated against real playthrough values.
+// A successful ally run produced AC 165.2 / EC 76.1 — EC is ~46% of AC.
+// All thresholds read directly from the cohesion bars in the Persons panel.
+// Checked in order — first match fires.
 //
-// effectiveMP = macropassionValue × modifier (see fame/infamy system above).
-// A score of 50 reflects a strong, politically relevant alliance. 75 is deep
-// trust amplified by public standing. 200 requires near-maximum passion and
-// fame on a single Star — a generational relationship.
+// win_domination:
+//   Enemies exist. AC >= 50 AND EC < AC × 0.5.
+//   You are winning 2:1 or better. The playthrough that anchored these values
+//   sits just inside this threshold at 165 vs 76.
+//
+// win_leveraged:
+//   No enemies. AC > 45.
+//   Built without creating organized opposition, with real cohesion weight.
+//
+// win_balanced:
+//   Enemies exist. AC > EC (leading). EC >= AC × 0.5 (genuinely contested).
+//   AC >= 30 (floor — early jitter and thin values don't trigger this).
+//   The hardest condition to sustain: winning an active fight without
+//   overwhelming it. The opposition is a real counterweight, not a footnote.
 
 const WIN_CONDITIONS = [
   {
-    id: 'win_everyone_happy',
-    condition: (stars) => Object.values(stars).every(s => effectiveMP(s) >= 50),
-    headline: 'A BENEFICIAL AGREEMENT',
-    subhead: 'A Beneficial Agreement',
-    prompt: "All three Stars are well-disposed toward you. Esperanza, Solomon, and Whitmore each hold you in genuine regard. The valley is stable. You could close the ledger here.",
-    acceptLabel: 'Bring the Valley Together',
-    body: "Three people who had every reason to work against each other — and against you — have chosen not to. Esperanza's grant is secure. Solomon's post is a valley institution. Whitmore has what the railroad sent him for, and it didn't cost the valley everything. You navigated the distance between them without harming any of them in the process. That's not luck. Just the result of careful decisions.\n\nThe ledger is full. The valley remembers what you built here.",
-    declineHeadline: 'AN UNUSUAL SEASON PASSES WITHOUT CEREMONY — The arrangement holds. No names attached.',
-    declineBody: "The valley is, for the moment, at something resembling peace. The three parties with the most to gain from conflict have chosen, this season, not to pursue it. No formal record was made of the arrangement. The paper notes only its absence from the docket.",
+    id: 'win_domination',
+    condition: (stars, taken) => {
+      const { allyCohesion, enemyCohesion, enemies } = ruinStrengths(stars);
+      return enemies.length > 0 && allyCohesion >= 50 && enemyCohesion < allyCohesion * 0.5;
+    },
+    headline: 'THE VALLEY ANSWERS TO YOU',
+    subhead: 'Domination',
+    prompt: "You have enemies in this valley and they are organized. They don't have enough. Your ally cohesion leads theirs by better than two to one. The bars have not been this far apart by accident. You could name this.",
+    acceptLabel: 'Close the Ledger',
+    body: "They are still here. The opposition did not dissolve — it was outbuilt. Every decision you made that cost you something with one party bought you something with another, and the arithmetic of those trades has been running in your favor since before anyone noticed the direction it was going.\n\nThe enemy cohesion bar is real. The people behind it made real choices that made them real adversaries. They are simply not enough. What you assembled on the other side of the ledger is heavier, more durable, and more politically relevant than anything they can coordinate.\n\nThis is what a dominant position looks like in a contested territory. Not the end of opposition. The clear, durable preponderance of force that makes opposition academic.",
+    declineHeadline: 'THE BARS HOLD — Ally cohesion leads by 2:1. Opposition active but outweighed.',
+    declineBody: "The balance of forces in the valley remains as it was. Ally cohesion leads enemy cohesion by a decisive margin. No formal conclusion was drawn. Both sides are watching the bars. The ledger stays open.",
   },
   {
-    id: 'win_hard_bargain',
-    condition: (stars) => {
-      const vals = Object.values(stars).map(s => effectiveMP(s)).sort((a, b) => b - a);
-      return vals[0] >= 150 && vals[1] >= 150 && vals[2] >= -15;
+    id: 'win_leveraged',
+    condition: (stars, taken) => {
+      const { allyCohesion, enemies } = ruinStrengths(stars);
+      return enemies.length === 0 && allyCohesion > 45;
     },
-    headline: 'TWO ALLIES AND A COLD PEACE',
-    subhead: 'Hard-Driven Bargain',
-    prompt: "Two of the Stars hold you in deep trust. The third is neutral — not an enemy, not a friend. You have taken sides and it shows. You could call this a victory.",
-    acceptLabel: 'Seal the Bargain',
-    body: "You didn't make everyone happy. You made the people who mattered most deeply loyal, and you kept the third from becoming an enemy. That's a different kind of achievement — it requires knowing what you're willing to sacrifice and holding the line on it. The relationship that stayed cold knows what it is. So do you.\n\nThis is what it looks like to win something that costs something. The valley is not at peace. It is in balance. You are the reason.",
-    declineHeadline: 'VALLEY BALANCE HOLDS — Two alliances intact. One party watching from a distance.',
-    declineBody: "The alignment of interests in the valley remains as it has been. Two parties closely tied to the local landholder; one at arm's length. No formal change was recorded this season. The question of how long such arrangements hold without being named is one the paper declines to answer.",
+    headline: 'THE VALLEY HOLDS WITHOUT A CONTEST',
+    subhead: 'Leveraged Position',
+    prompt: "No enemies. Real ally cohesion. No one in this valley has organized against you — and your allies have the weight to ensure it stays that way. You could close the ledger on this.",
+    acceptLabel: 'Close the Ledger',
+    body: "You built something in this valley without making enemies of the people you didn't build it with. That requires a different kind of discipline — knowing which asks to make, which costs to absorb, which relationships to leave cold rather than burn.\n\nThe ally cohesion bar tells the story. Not a single relationship, not a quiet acquaintance — organized support with actual political weight. The kind that shows on the bars and holds when tested.\n\nNo one is moving against you. That is not luck. You made specific decisions that left the valley's most dangerous parties without a reason to organize. The ledger closes on a position that required both halves of that sentence to be true simultaneously.",
+    declineHeadline: 'THE POSITION HOLDS — No opposition. Ally cohesion maintained.',
+    declineBody: "The current configuration persists. No organized opposition. Ally cohesion above the threshold. The ledger stays open. What this looks like in five years is a different question.",
   },
   {
-    id: 'win_dominant_power',
-    condition: (stars) => {
-      const vals = Object.values(stars).map(s => effectiveMP(s));
-      return vals.some(v => v >= 150) && vals.every(v => v >= -15);
+    id: 'win_balanced',
+    condition: (stars, taken) => {
+      const { allyCohesion, enemyCohesion, enemies } = ruinStrengths(stars);
+      // AC > 30, enemies exist, and ally cohesion is more than 3× enemy cohesion.
+      // Enemies are present but too weak to be a genuine counterweight — a clean
+      // lead without the overwhelming weight domination requires.
+      return enemies.length > 0 && allyCohesion > 30 && enemyCohesion > 0 && allyCohesion / enemyCohesion > 3;
     },
-    headline: 'THE VALLEY IS YOURS',
-    subhead: 'Dominant Power',
-    prompt: "One Star's loyalty to you is absolute. The other two have calculated that working against you costs more than it's worth. The valley moves around you. You could close on this.",
-    acceptLabel: 'Claim the Valley',
-    body: "One of them would do almost anything for you. The other two have decided that opposing you costs more than it's worth. You didn't build consensus — you built gravity. Everything in the valley moves in relation to where you stand.\n\nThis is not the same as peace. It is precedence. The valley will remember the shape of what you made here long after the particulars are forgotten.",
-    declineHeadline: 'VALLEY ROAD RUNS THROUGH ONE NAME — No formal consolidation. The weight is there regardless.',
-    declineBody: "The commercial and legal gravity of the valley continues to concentrate. No announcement was made. None was needed. The other parties are present and accounted for. They have simply stopped contesting the direction of things.",
+    headline: 'THE CONTEST IS YOURS — FOR NOW',
+    subhead: 'Balanced Dominance',
+    prompt: "You have enemies and they have weight. Your allies lead — but not by the kind of margin that makes the outcome feel inevitable. You are winning an active fight, and the bars show it. You could call it here.",
+    acceptLabel: 'Hold the Position',
+    body: "The enemy cohesion bar is not a footnote. The people behind it are organized, and their opposition is real — you can see it in the numbers. What you have built on the other side is heavier, but not so much heavier that the result was ever inevitable.\n\nThat is the record this playthrough will leave. Not domination. Not peace. A hard-fought lead in a valley where the other side was genuinely trying. The decisions that got you here were not easy and they were not free. The balance reflects that.\n\nThe ledger closes on a contested win. The opposition stays. The math is yours.",
+    declineHeadline: 'THE CONTEST CONTINUES — Ally cohesion leads. Enemy cohesion within range.',
+    declineBody: "The balance of forces in the valley remains close. Ally cohesion leads, but enemy cohesion is within half the ally figure. The ledger stays open. Both sides are watching the bars.",
   },
 ];
 
@@ -2024,7 +2166,7 @@ function checkWin(state) {
   if (state.ruined || state.won || state.pendingWin) return state;
   for (const wc of WIN_CONDITIONS) {
     if (state.firedEvents.includes(wc.id)) continue;
-    if (!wc.condition(state.stars)) continue;
+    if (!wc.condition(state.stars, state.taken)) continue;
     return { ...state, pendingWin: wc };
   }
   return state;
@@ -2059,9 +2201,20 @@ function applyE(stars, effects, mods = null) {
 // For each star touched by the effects:
 //   1. Sum all passion deltas for that star
 //   2. Divide by that star's total passion count (weighted average)
-//   3. If sum > 0: apply to fame using 1 + (current fame / 100) as modifier
-//      If sum < 0: apply absolute value to infamy using 1 + (current infamy / 100)
-//      If sum = 0: no change
+//   3. Apply cross-compounding modifiers:
+//
+//      Fame gains:   base × (1 + fame/100) × (1 - infamy/100)
+//        — existing fame amplifies further fame gains (snowball)
+//        — existing infamy penalises fame gains symmetrically
+//        — at infamy 100, fame gains are completely zeroed
+//
+//      Infamy gains: base × (1 + infamy/100) × (1 - fame/100)
+//        — existing infamy amplifies further infamy gains
+//        — existing fame dampens infamy gains symmetrically
+//        — at fame 100, infamy gains are completely zeroed
+//
+//   Both are clamped to [0, 100] after application.
+//   fameMult / infamyMult from computeModifiers() stack multiplicatively on top.
 //
 // applyFI remains for convergence/reactive events that use authored fameEffects.
 
@@ -2087,11 +2240,13 @@ function applyFIFromEffects(stars, effects, tick = null, mods = null) {
     const infamyMult = mods?.[starId]?.infamyMult ?? 1.0;
 
     if (weightedAvg > 0) {
-      const modifier = 1 + (star.fame / 100);
+      // Fame gains compound with existing fame, counter-compounded by infamy
+      const modifier = (1 + (star.fame / 100)) * Math.max(0, 1 - (star.infamy / 100));
       star.fame = Math.round(Math.max(lo, Math.min(hi, star.fame + weightedAvg * modifier * fameMult)));
       if (tick) star.fameLastChanged = tick;
     } else {
-      const modifier = 1 + (star.infamy / 100);
+      // Infamy gains compound with existing infamy, counter-compounded by fame
+      const modifier = (1 + (star.infamy / 100)) * Math.max(0, 1 - (star.fame / 100));
       star.infamy = Math.round(Math.max(lo, Math.min(hi, star.infamy + Math.abs(weightedAvg) * modifier * infamyMult)));
       if (tick) star.infamyLastChanged = tick;
     }
@@ -2104,13 +2259,13 @@ function applyFI(stars, fameEff, infamyEff, tick = null) {
   const lo = 0, hi = 100;
   for (const [k, v] of Object.entries(fameEff)) {
     if (!s[k] || v === 0) continue;
-    const modifier = 1 + (s[k].fame / 100);
+    const modifier = (1 + (s[k].fame / 100)) * Math.max(0, 1 - (s[k].infamy / 100));
     s[k].fame = Math.round(Math.max(lo, Math.min(hi, s[k].fame + v * modifier)));
     if (tick) s[k].fameLastChanged = tick;
   }
   for (const [k, v] of Object.entries(infamyEff)) {
     if (!s[k] || v === 0) continue;
-    const modifier = 1 + (s[k].infamy / 100);
+    const modifier = (1 + (s[k].infamy / 100)) * Math.max(0, 1 - (s[k].fame / 100));
     s[k].infamy = Math.round(Math.max(lo, Math.min(hi, s[k].infamy + v * modifier)));
     if (tick) s[k].infamyLastChanged = tick;
   }
@@ -2185,7 +2340,7 @@ const INIT = {
   year: SCENARIO.startYear, season: SCENARIO.startSeason, quietCount: 0,
   stars: INITIAL_STARS,
   taken: [],           // action IDs resolved (accepted, declined, or expired)
-  declined: [],        // subset of taken: resolved without the player acting (declined or expired)
+  declined: [],        // subset of taken: resolved without the player acting (declined or declined)
   hiddenActions: [],   // mysteryExpiry actions the player declined — removed from Decisions but expiry still fires naturally
   log: [],             // Chronicle entries, newest first
   deferred: [],        // queued future Chronicle entries { fireYear, headline, body, effects, ... }
@@ -2197,6 +2352,9 @@ const INIT = {
   revealedPassions: [],  // "starId:passionKey" strings permanently unlocked (hidden passions)
   pendingReveal: [],     // { key, year } objects queued for the PassionRevealModal
   pendingIntros: ['esperanza'],  // Esperanza intro fires on load; others queued when revealedStars gains new IDs
+  pendingCohesionEvents: [], // { type: 'ally'|'enemy', threshold, year, season } queued world-shift events
+  firedCohesionEvents: [],   // "ally-20" style keys, prevents re-firing same threshold
+  cohesionEverShown: { ally: false, enemy: false }, // latches true once each bar has ever been relevant
   pendingGuest: null,    // current GUEST_POOL entry awaiting player response
   guestHistory: [],      // guest IDs already answered or departed unanswered
   guestCooldown: 0,      // seasons since last guest departed — drives Poisson draw probability
@@ -2207,6 +2365,55 @@ const INIT = {
   obscured: false,    // inactivity ending — world moved on without player
   decisionTick: 0,    // seasons since last player-driven decision; resets on ACT/DECLINE/CHOOSE/deferred fire
 };
+
+// ─── COHESION THRESHOLD EVENTS ───────────────────────────────────────────────
+// Fires a world-shift modal when ally or enemy cohesion first crosses a
+// meaningful threshold. Like character intros, this is presented as a modal
+// describing how the world has changed. Thresholds: 10, 25, 50 for each side.
+const COHESION_THRESHOLDS = [10, 25, 50];
+
+const COHESION_EVENT_TEXT = {
+  ally: {
+    10: { headline: 'The Valley Begins to Hold', body: "Something has shifted — quietly, without announcement, but real. The people who have benefited from your choices are beginning to act in coordination. Not a formal alliance; nothing that would hold up in a territorial court. But word travels on roads you helped build, and the people who use those roads have started talking to each other about you. Your standing in the valley has weight now. It can be spent." },
+    25: { headline: 'An Alliance Worth Naming', body: "It is no longer possible to pretend this is coincidence. The relationships you have built are functioning as a network — information moves, favors are extended, the valley organizes itself in ways that benefit you. People who have never spoken to each other share a common understanding of where you stand. The valley's judgment has moved in your favor. That judgment has consequences." },
+    50: { headline: 'The Valley Speaks as One', body: "What you have built here is not merely a collection of favorable relationships. It is a political fact. The alliance of interests supporting your position in the valley is strong enough that even those who dislike you must calculate its weight before moving against you. You have become load-bearing. The valley would notice your absence in ways it would not have a season ago." },
+  },
+  enemy: {
+    10: { headline: 'Opposition Takes Shape', body: "The resistance to your position in the valley has begun to organize. Not openly — not yet — but the conversations that matter are happening without you in the room. People who have suffered from your choices are starting to compare notes. The shape of what is forming is not yet clear. But the valley's weight has shifted, and you are on the wrong side of it." },
+    25: { headline: 'The Opposition Has Found Its Voice', body: "The forces working against you in this valley have reached a threshold of coordination. They are not merely reacting to individual decisions anymore — they are anticipating. The valley's hostile interests have begun to function as something more than a set of separate grievances. They are starting to become a bloc. Your allies are the only thing keeping this from becoming irreversible." },
+    50: { headline: 'The Valley Has Turned Against You', body: "The balance of opposition in this valley has become structurally hostile to your position. The network of interests working against you can now act with something approaching unified purpose. Your allies are the only check on what this means in practice. If that check weakens — if their cohesion falls below the enemy's — the valley will move. It is not yet too late. But the window is narrowing." },
+  },
+};
+
+function checkCohesionThresholds(state, prevStars) {
+  const { allyCohesion: prevAlly, enemyCohesion: prevEnemy } = ruinStrengths(prevStars);
+  const { allyCohesion: newAlly, enemyCohesion: newEnemy, allies, enemies } = ruinStrengths(state.stars);
+
+  const firedKeys = [...(state.firedCohesionEvents ?? [])];
+  const newEvents = [...(state.pendingCohesionEvents ?? [])];
+
+  for (const thresh of COHESION_THRESHOLDS) {
+    const allyKey = `ally-${thresh}`;
+    if (!firedKeys.includes(allyKey) && prevAlly < thresh && newAlly >= thresh) {
+      firedKeys.push(allyKey);
+      newEvents.push({ type: 'ally', threshold: thresh, year: state.year, season: state.season });
+    }
+    const enemyKey = `enemy-${thresh}`;
+    if (!firedKeys.includes(enemyKey) && prevEnemy < thresh && newEnemy >= thresh) {
+      firedKeys.push(enemyKey);
+      newEvents.push({ type: 'enemy', threshold: thresh, year: state.year, season: state.season });
+    }
+  }
+
+  // Update the persistent latch — once a side has been seen it stays visible
+  const prev = state.cohesionEverShown ?? { ally: false, enemy: false };
+  const cohesionEverShown = {
+    ally:  prev.ally  || allies.length  > 0,
+    enemy: prev.enemy || enemies.length > 0,
+  };
+
+  return { ...state, firedCohesionEvents: firedKeys, pendingCohesionEvents: newEvents, cohesionEverShown };
+}
 
 function reducer(state, action) {
   if (action.type === 'ACT') {
@@ -2261,7 +2468,7 @@ function reducer(state, action) {
     const newlyRevealed = revealedPassions.filter(k => !state.revealedPassions.includes(k));
     const pendingReveal = [...state.pendingReveal, ...newlyRevealed.map(k => ({ key: k, year: state.year }))];
     const next = { ...state, stars, taken: [...state.taken, act.id], deferred, revealedPassions, pendingReveal, decisionTick: 0 };
-    return checkWin(checkRuin(checkEvents({ ...next, log: [entry, ...state.log] }, prevStars, [])));
+    return checkCohesionThresholds(checkWin(checkRuin(checkEvents({ ...next, log: [entry, ...state.log] }, prevStars, []))), prevStars);
   }
   if (action.type === 'CHOOSE') {
     const conv = CONVERGENCE_EVENTS.find(e => e.id === action.eventId);
@@ -2286,7 +2493,7 @@ function reducer(state, action) {
     const newlyRevealed = revealedPassions.filter(k => !state.revealedPassions.includes(k));
     const pendingReveal = [...state.pendingReveal, ...newlyRevealed.map(k => ({ key: k, year: state.year }))];
     const next = { ...state, stars, pendingChoices: pending, revealedPassions, pendingReveal, decisionTick: 0 };
-    return checkWin(checkRuin(checkEvents({ ...next, log: [entry, ...state.log] }, prevStars, [])));
+    return checkCohesionThresholds(checkWin(checkRuin(checkEvents({ ...next, log: [entry, ...state.log] }, prevStars, []))), prevStars);
   }
   if (action.type === 'ADVANCE') {
     const sIdx = SEASONS.indexOf(state.season);
@@ -2359,64 +2566,91 @@ function reducer(state, action) {
 
     const newDecisionTick = deferredFired ? 0 : state.decisionTick + 1;
 
-    // Fame / Infamy decay — relevance fades without active maintenance.
-    // Grace period: no decay in the season a value was last modified.
-    // Tiers: 0–30 → 1.0/season, 30–50 → 0.75/season, 50–100 → 0.5/season.
+    // ── Passion decay ────────────────────────────────────────────────────────────
+    // Macropassion-gated, bidirectional. Rates from the design table:
+    //
+    //  Band           posRate  posFloor  negRate  negFloor
+    //  ≥  50          0        null      2.0      -15      deep ally: positives locked, negatives heal fast
+    //  ≥  30          0.25     null      1.5      -30      ally: positives barely erode, negatives heal
+    //  ≥  15          0.5      null      1.25     -50      cautious: moderate both ways
+    //  -15 to +15     0.75     null      0.75     null     neutral: symmetric drift toward zero
+    //  ≤ -15          1.0      null      0.5      null     competitor: positives erode, negatives locked
+    //  ≤ -30          1.25     null      0.25     null     opponent: positives erode faster, negatives very locked
+    //  ≤ -50          2.0      null      0        null     deep enemy: positives deleted fast, negatives permanent
+    //
+    // negFloor: null on enemy bands means negative passions do NOT auto-repair —
+    //   the relationship stays hostile without player action. negFloor on ally bands
+    //   means minor negatives heal up to that floor automatically.
+    //
+
     const currentTick = `${state.year}-${state.season}`;
     for (const starId of Object.keys(stars)) {
       const st = stars[starId];
-      if (st.fame > 0 && st.fameLastChanged !== currentTick) {
-        st.fame = Math.max(0, Math.round(st.fame - decayRate(st.fame)));
-      }
-      if (st.infamy > 0 && st.infamyLastChanged !== currentTick) {
-        st.infamy = Math.max(0, Math.round(st.infamy - decayRate(st.infamy)));
-      }
-    }
+      const macro = macropassionValue(st.passions);
 
-    // Passion decay — macropassion-gated, bidirectional, runs every season.
-    //
-    // Positive passions drift toward zero as macropassion falls.
-    // Negative passions drift toward zero as macropassion rises, floored at a threshold.
-    // The two sides mirror each other — allies forgive, enemies erode goodwill.
-    // All rates are halved from the design maximum to preserve the snowball effect
-    // and give the player time to respond before decay becomes irreversible.
-    //
-    //  Macropassion     Positive decay   Negative decay   Negative floor
-    //  ≥ 50             0                0.5/season       -15
-    //  ≥ 30             0.25/season      0.25/season      -30  (← Friendly Neighbor band)
-    //  ≥ 15             0.5/season       0.5/season       -50
-    //  -15 to 15        0.75/season      0.75/season      -50
-    //  ≤ -15            1.0/season       0                none (Clear Competitor+)
-    //  ≤ -30            2.0/season       0                none (Active Adversary+)
-
-    for (const starId of Object.keys(stars)) {
-      const macro = macropassionValue(stars[starId].passions);
-
-      let posRate = 0;   // how fast positive passions drift toward 0
-      let negRate = 0;   // how fast negative passions drift toward 0
-      let negFloor = null; // null = negative passions don't auto-repair
+      let posRate  = 0;
+      let negRate  = 0;
+      let negFloor = null;
 
       if (macro >= 50) {
-        posRate = 0;    negRate = 0.5;  negFloor = -15;
+        posRate = 0;    negRate = 2.0;  negFloor = -15;
       } else if (macro >= 30) {
-        posRate = 0.25; negRate = 0.25; negFloor = -30;
+        posRate = 0.25; negRate = 1.5;  negFloor = -30;
       } else if (macro >= 15) {
-        posRate = 0.5;  negRate = 0.5;  negFloor = -50;
+        posRate = 0.5;  negRate = 1.25; negFloor = -50;
       } else if (macro > -15) {
-        posRate = 0.75; negRate = 0.75; negFloor = -50;
+        posRate = 0.75; negRate = 0.75; negFloor = null;
       } else if (macro > -30) {
-        posRate = 1.0;  negRate = 0;    negFloor = null;
+        posRate = 1.0;  negRate = 0.5;  negFloor = null;
+      } else if (macro > -50) {
+        posRate = 1.25; negRate = 0.25; negFloor = null;
       } else {
         posRate = 2.0;  negRate = 0;    negFloor = null;
       }
 
-      for (const passion of Object.values(stars[starId].passions)) {
+      // Passion values.
+      // negFloor semantics: on ally bands it is a repair ceiling (negatives heal up to this floor).
+      //   null on ALLY bands (neutral) means repair all the way to 0 — full drift toward zero.
+      //   null on ENEMY bands means NO repair at all — hostility is locked without player action.
+      // The band table encodes this correctly: ally/neutral bands have negRate > 0 only when
+      // negFloor is set OR the band is neutral (repair to 0). Enemy bands have negFloor = null
+      // AND we must NOT repair. So the repair rule is: only repair if negFloor is explicitly set
+      // (ally bands), OR if we are in the neutral band (macro > -15) where both drift to zero.
+      const isNeutralBand = macro > -15 && macro < 15;
+      for (const passion of Object.values(st.passions)) {
         const v = passion.value;
-        if (v > 0 && posRate > 0) {
-          passion.value = Math.max(0, v - posRate);
-        } else if (v < 0 && negRate > 0 && negFloor !== null && v > negFloor) {
-          passion.value = Math.min(0, v + negRate);
+        // Positive erosion — always toward 0
+        if (v > 0 && posRate > 0) passion.value = Math.max(0, v - posRate);
+        // Negative repair — only on ally bands (negFloor set) or neutral band (drift to 0)
+        if (v < 0 && negRate > 0) {
+          if (negFloor !== null && v > negFloor) {
+            // Ally band: repair up to the floor ceiling
+            passion.value = Math.min(0, v + negRate);
+          } else if (isNeutralBand) {
+            // Neutral: drift all the way back to 0
+            passion.value = Math.min(0, v + negRate);
+          }
+          // Enemy bands (negFloor === null, !isNeutralBand): no repair
         }
+      }
+
+      // Fame mirrors positive passions: decays at posRate.
+      //   Deep ally (posRate = 0): fame locked in place.
+      //   Deep enemy (posRate = 2.0): residual fame erodes fast, removing any dampening of enemy cohesion.
+      //
+      // Infamy mirrors negative passions: only decays when the band allows negative healing.
+      //   Enemy bands (negRate = 0, or hostile bands with negFloor = null): infamy locked — as permanent as the hostility.
+      //   Ally/neutral bands (negRate > 0): infamy heals at negRate alongside the negative passions.
+      //
+      // Grace period: no decay the season the value was last set.
+      const fameDecayRate = posRate;
+      const infamyCanDecay = negRate > 0 && (negFloor !== null || isNeutralBand);
+      const infamyDecayRate = infamyCanDecay ? negRate : 0;
+      if (st.fame > 0 && fameDecayRate > 0 && st.fameLastChanged !== currentTick) {
+        st.fame = Math.max(0, Math.round(st.fame - fameDecayRate));
+      }
+      if (st.infamy > 0 && infamyDecayRate > 0 && st.infamyLastChanged !== currentTick) {
+        st.infamy = Math.max(0, Math.round(st.infamy - infamyDecayRate));
       }
     }
 
@@ -2431,16 +2665,27 @@ function reducer(state, action) {
       }
     }
 
-    // Quiet season
+    // Quiet season — filtered by optional requires(state) predicate.
+    // State snapshot used for gating includes taken, revealedStars, year, and live stars.
     const hadAction = state.log.length > 0 && state.log[0].year === state.year && state.log[0].season === state.season && !state.log[0].isQuiet;
     let quietEntry = null;
     if (!hadAction) {
-      const seasonPool = QUIET_SEASONS_BY_SEASON[state.season] || [];
-      const usedSeasonCount = state.log.filter(e => e.isQuiet && e.season === state.season).length;
-      const qs = usedSeasonCount < seasonPool.length
-        ? seasonPool[usedSeasonCount]
-        : QUIET_SEASONS_GENERIC[state.quietCount % QUIET_SEASONS_GENERIC.length];
-      quietEntry = { id: `quiet-${state.year}-${state.season}`, year: state.year, season: state.season, headline: qs.h, body: qs.b, decision: null, effects: [], isDeferred: false, isQuiet: true, isReactive: false };
+      const gateState = { taken: state.taken, revealedStars: state.revealedStars, year: state.year, season: state.season, stars };
+      const rawPool = QUIET_SEASONS_BY_SEASON[state.season] || [];
+      const seasonPool = rawPool.filter(e => !e.requires || e.requires(gateState));
+      const usedSeasonIds = new Set(state.log.filter(e => e.isQuiet && e.season === state.season).map(e => e.id));
+      // Find first eligible entry not yet used this season
+      const unusedEntry = seasonPool.find(e => {
+        // Build a deterministic id for this entry to check against used
+        const entryId = `quiet-${state.season}-${e.h.slice(0, 20).replace(/\s+/g,'-')}`;
+        return !usedSeasonIds.has(entryId);
+      });
+      const genericPool = QUIET_SEASONS_GENERIC.filter(e => !e.requires || e.requires(gateState));
+      const qs = unusedEntry ?? genericPool[state.quietCount % genericPool.length];
+      const quietId = unusedEntry
+        ? `quiet-${state.season}-${qs.h.slice(0, 20).replace(/\s+/g,'-')}`
+        : `quiet-${state.year}-${state.season}-${state.quietCount}`;
+      quietEntry = { id: quietId, year: state.year, season: state.season, headline: qs.h, body: qs.b, decision: null, effects: [], isDeferred: false, isQuiet: true, isReactive: false };
     }
 
     // Poisson-style guest draw — probability increases each season without a guest,
@@ -2519,12 +2764,20 @@ function reducer(state, action) {
 
     const next = { ...state, year: nextYear, season: nextSeason, stars, taken: newTaken, declined: newDeclined, deferred: remaining, quietCount: state.quietCount + (quietEntry ? 1 : 0), seenActions, pendingGuest, guestHistory, homesteadLog, firedEvents: updatedFiredEvents, revealedPassions, pendingReveal, hiddenActions: state.hiddenActions, decisionTick: newDecisionTick, pendingIntros, revealedStars, guestCooldown: pendingGuest && !state.pendingGuest ? 0 : newGuestCooldown };
     const afterEvents = checkWin(checkRuin(checkEvents({ ...next, log: [...newEntries, ...(quietEntry ? [quietEntry] : []), ...state.log] }, prevStars, [])));
-    // Obscurity check — if the player has been inactive for 10 seasons and the game
-    // hasn't already ended, the world closes around the absence.
-    if (!afterEvents.ruined && !afterEvents.won && !afterEvents.obscured && newDecisionTick >= 10) {
-      return { ...afterEvents, obscured: true };
+    // Obscurity / ruin-by-neglect check:
+    //   Timer fires at 20 seasons of inactivity (doubled from 10).
+    // Obscurity check — fires after 20 seasons of inactivity.
+    // Suppressed if allies are strong enough (allyCohesion > 50 — embedded).
+    // Becomes ruin instead if enemies already outweigh allies.
+    if (!afterEvents.ruined && !afterEvents.won && !afterEvents.obscured && newDecisionTick >= 20) {
+      if (isRuined(afterEvents.stars)) {
+        return checkRuin({ ...afterEvents, ruined: false });
+      }
+      if (!isObscuritySuppressed(afterEvents.stars)) {
+        return { ...afterEvents, obscured: true };
+      }
     }
-    return afterEvents;
+    return checkCohesionThresholds(afterEvents, prevStars);
   }
   if (action.type === 'GUEST_CHOOSE') {
     const guest = GUEST_POOL.find(g => g.id === action.guestId);
@@ -2549,10 +2802,13 @@ function reducer(state, action) {
     const newlyRevealed = revealedPassions.filter(k => !state.revealedPassions.includes(k));
     const pendingReveal = [...state.pendingReveal, ...newlyRevealed.map(k => ({ key: k, year: state.year }))];
     const next = { ...state, stars, pendingGuest: null, guestHistory: [...state.guestHistory, action.guestId], homesteadLog, deferred, revealedPassions, pendingReveal, guestCooldown: 0 };
-    return checkWin(checkRuin(checkEvents({ ...next, log: [entry, ...state.log] }, prevStars, [])));
+    return checkCohesionThresholds(checkWin(checkRuin(checkEvents({ ...next, log: [entry, ...state.log] }, prevStars, []))), prevStars);
   }
   if (action.type === 'DISMISS_REVEAL') {
     return { ...state, pendingReveal: state.pendingReveal.slice(1) };
+  }
+  if (action.type === 'DISMISS_COHESION_EVENT') {
+    return { ...state, pendingCohesionEvents: state.pendingCohesionEvents.slice(1) };
   }
   if (action.type === 'DISMISS_INTRO') {
     return { ...state, pendingIntros: state.pendingIntros.slice(1) };
@@ -2644,9 +2900,114 @@ function thresholdCrossing(currentVal, delta, passion) {
 }
 
 // ─── PASSION BAR (centered spectrum) ─────────────────────────────────────────
+// ─── COHESION BARS ────────────────────────────────────────────────────────────
+// Shows ally vs enemy cohesion in the Persons panel.
+// Only ally bar renders when at least one ally exists; same for enemy bar.
+// Cohesion tooltip rendered via position:absolute inside each label row's
+// position:relative container — no coordinate math, scroll-proof by construction.
+function CohesionBars({ stars, everShown = { ally: false, enemy: false } }) {
+  const T = useContext(ThemeCtx);
+  const [hov, setHov] = useState(null);
+
+  const starList = Object.values(stars);
+  const allies  = starList.filter(s => macropassionValue(s.passions) > 15);
+  const enemies = starList.filter(s => macropassionValue(s.passions) < -15);
+  const allyCoh  = allies.length  ? allies.reduce((sum,s)  => sum + effectiveMP(s), 0) / allies.length  : 0;
+  const enemyCoh = enemies.length ? enemies.reduce((sum,s) => sum + Math.abs(effectiveMP(s)), 0) / enemies.length : 0;
+
+  const showAlly  = everShown.ally  || allies.length  > 0;
+  const showEnemy = everShown.enemy || enemies.length > 0;
+
+  if (!showAlly && !showEnemy) return null;
+
+  const maxCoh = Math.max(Math.abs(allyCoh), Math.abs(enemyCoh), 20);
+  const hasEnemies  = enemies.length > 0;
+  const ruinWarning = hasEnemies && enemyCoh > allyCoh;
+
+  const allyTip  = `Ally Cohesion measures the combined effective standing of those who stand with you — ${allies.length} ${allies.length === 1 ? 'ally' : 'allies'} currently. When this exceeds enemy cohesion, your standing in the valley is protected.`;
+  const enemyTip = `Enemy Cohesion measures the combined force of those working against you — ${enemies.length} ${enemies.length === 1 ? 'enemy' : 'enemies'} currently.${ruinWarning ? ' This exceeds your ally cohesion. Ruin is possible.' : ' Your allies currently hold the balance.'}`;
+
+  const tipStyle = (accentCol, borderCol) => ({
+    position: 'absolute', top: '100%', left: 0, marginTop: 5, zIndex: 50,
+    width: 220, background: T.hdr,
+    border: `1px solid ${borderCol}`,
+    borderRadius: T.radius, padding: '10px 12px',
+    boxShadow: '0 6px 20px rgba(0,0,0,0.45)', pointerEvents: 'none',
+  });
+
+  return (
+    <div style={{ marginBottom: 12, paddingBottom: 10, borderBottom: `1px solid ${T.bdr}` }}>
+      {/* Ally bar */}
+      {showAlly && (
+        <div style={{ marginBottom: showEnemy ? 6 : 0 }}>
+          <div
+            style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', marginBottom: 2, cursor: 'default' }}
+            onMouseEnter={() => setHov('ally')}
+            onMouseLeave={() => setHov(null)}>
+            <span style={{ fontSize: T.fsXxs, color: '#4a8e42', textTransform: 'uppercase', letterSpacing: T.lsWide, fontFamily: "'Courier Prime', monospace", borderBottom: hov === 'ally' ? '1px solid #4a8e42' : '1px solid transparent', transition: 'border-color 0.15s' }}>Ally Cohesion</span>
+            <span style={{ fontSize: T.fsXxs, color: '#4a8e42', fontFamily: "'Courier Prime', monospace" }}>{allyCoh.toFixed(1)}</span>
+            {hov === 'ally' && (
+              <div style={tipStyle('#4a8e42', '#4a8e4266')}>
+                <div style={{ fontSize: T.fsXxs, color: '#4a8e42', textTransform: 'uppercase', letterSpacing: T.lsWide, fontFamily: "'Courier Prime', monospace", marginBottom: 5 }}>Ally Cohesion</div>
+                <div style={{ fontSize: T.fsSm, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: T.lhRelaxed }}>{allyTip}</div>
+              </div>
+            )}
+          </div>
+          <div style={{ position: 'relative', height: 4, background: T.surf, borderRadius: 2, overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', left: 0, width: `${Math.min(100, (allyCoh / maxCoh) * 100)}%`, top: 0, bottom: 0, background: '#4a8e42', transition: 'width 0.6s ease' }} />
+          </div>
+        </div>
+      )}
+
+      {/* Balance divider */}
+      {showAlly && showEnemy && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+          <div style={{ flex: 1, height: '0.5px', background: ruinWarning ? '#9e1a1033' : '#4a8e4233' }} />
+          <span style={{ fontSize: T.fsXxs, color: ruinWarning ? '#9e1a10' : T.inkFaint, fontFamily: "'Courier Prime', monospace", letterSpacing: T.lsSm }}>
+            {ruinWarning ? '⚠ enemy leads' : allyCoh > enemyCoh ? 'ally leads' : allyCoh === enemyCoh ? 'balanced' : '⚠ enemy leads'}
+          </span>
+          <div style={{ flex: 1, height: '0.5px', background: ruinWarning ? '#9e1a1033' : '#4a8e4233' }} />
+        </div>
+      )}
+
+      {/* Enemy bar */}
+      {showEnemy && (
+        <div>
+          <div
+            style={{ position: 'relative', display: 'flex', justifyContent: 'space-between', marginBottom: 2, cursor: 'default' }}
+            onMouseEnter={() => setHov('enemy')}
+            onMouseLeave={() => setHov(null)}>
+            <span style={{ fontSize: T.fsXxs, color: ruinWarning ? '#9e1a10' : '#be6030', textTransform: 'uppercase', letterSpacing: T.lsWide, fontFamily: "'Courier Prime', monospace", borderBottom: hov === 'enemy' ? `1px solid ${ruinWarning ? '#9e1a10' : '#be6030'}` : '1px solid transparent', transition: 'border-color 0.15s' }}>
+              Enemy Cohesion
+            </span>
+            <span style={{ fontSize: T.fsXxs, color: ruinWarning ? '#9e1a10' : '#be6030', fontFamily: "'Courier Prime', monospace" }}>{enemyCoh.toFixed(1)}</span>
+            {hov === 'enemy' && (
+              <div style={tipStyle(ruinWarning ? '#9e1a10' : '#be6030', ruinWarning ? '#9e1a1066' : '#be603066')}>
+                <div style={{ fontSize: T.fsXxs, color: ruinWarning ? '#9e1a10' : '#be6030', textTransform: 'uppercase', letterSpacing: T.lsWide, fontFamily: "'Courier Prime', monospace", marginBottom: 5 }}>
+                  {`Enemy Cohesion${ruinWarning ? ' — ⚠ Warning' : ''}`}
+                </div>
+                <div style={{ fontSize: T.fsSm, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: T.lhRelaxed }}>{enemyTip}</div>
+                {ruinWarning && (
+                  <div style={{ marginTop: 7, paddingTop: 6, borderTop: `1px solid ${T.bdrSub}`, fontSize: T.fsXxs, color: '#9e1a10', fontFamily: "'Courier Prime', monospace", letterSpacing: T.lsSm }}>
+                    Ruin is possible this season.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <div style={{ position: 'relative', height: 4, background: T.surf, borderRadius: 2, overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', left: 0, width: `${Math.min(100, (enemyCoh / maxCoh) * 100)}%`, top: 0, bottom: 0, background: ruinWarning ? '#9e1a10' : '#be6030', transition: 'width 0.6s ease' }} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PassionBar({ passionKey, p, color }) {
   const T = useContext(ThemeCtx);
   const [labelHov, setLabelHov] = useState(false);
+  const [stateHov, setStateHov] = useState(false);
   const v = p.value;
   const t = getThreshold(v);
   const tCol = thresholdColor(v);
@@ -2667,19 +3028,33 @@ function PassionBar({ passionKey, p, color }) {
   const bKey    = behaviorKey(v);
   const behavior = p.behaviors[bKey];
 
+  // Threshold state tooltip — semantic meaning + mechanical effect
+  const stateTooltip = behavior
+    ? `${t.label} — ${behavior}`
+    : `${t.label} — No significant position formed yet.`;
+
   return (
     <div style={{ marginBottom: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3, alignItems: 'baseline' }}>
-        <div style={{ position: 'relative' }} onMouseEnter={() => setLabelHov(true)} onMouseLeave={() => setLabelHov(false)}>
+        <div style={{ position: 'relative', maxWidth: '55%' }} onMouseEnter={() => setLabelHov(true)} onMouseLeave={() => setLabelHov(false)}>
           <span style={{ fontSize: T.fsMd, color: T.inkMid, fontFamily: "'Courier Prime', monospace", cursor: 'default', borderBottom: labelHov ? `1px solid ${T.bdrHi}` : '1px solid transparent', transition: 'border-color 0.15s' }}>{p.label}</span>
           {labelHov && p.desc && (
-            <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 5, zIndex: 50, width: 200, background: T.card, border: `1px solid ${T.bdrHi}`, borderRadius: T.radius, padding: T.padTip, boxShadow: '0 4px 12px rgba(0,0,0,0.4)', pointerEvents: 'none' }}>
+            <div style={{ position: 'absolute', top: '100%', left: 0, marginTop: 5, zIndex: 50, width: 170, maxWidth: 'calc(100vw - 20px)', background: T.card, border: `1px solid ${T.bdrHi}`, borderRadius: T.radius, padding: T.padTip, boxShadow: '0 4px 12px rgba(0,0,0,0.4)', pointerEvents: 'none' }}>
               <div style={{ fontSize: T.fsSm, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: T.lhNormal }}>{p.desc}</div>
               <div style={{ position: 'absolute', top: -5, left: 10, width: 8, height: 8, background: T.card, border: `1px solid ${T.bdrHi}`, borderBottom: 'none', borderRight: 'none', transform: 'rotate(45deg)' }} />
             </div>
           )}
         </div>
-        <span style={{ fontSize: T.fsSm, color: tCol, fontFamily: "'Courier Prime', monospace" }}>{t.label}</span>
+        <div style={{ position: 'relative' }} onMouseEnter={() => setStateHov(true)} onMouseLeave={() => setStateHov(false)}>
+          <span style={{ fontSize: T.fsSm, color: tCol, fontFamily: "'Courier Prime', monospace", cursor: 'default', borderBottom: stateHov ? `1px solid ${tCol}` : '1px solid transparent', transition: 'border-color 0.15s' }}>{t.label}</span>
+          {stateHov && (
+            <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 5, zIndex: 50, width: 170, maxWidth: 'calc(100vw - 20px)', background: T.card, border: `1px solid ${T.bdrHi}`, borderRadius: T.radius, padding: T.padTip, boxShadow: '0 4px 12px rgba(0,0,0,0.4)', pointerEvents: 'none' }}>
+              <div style={{ fontSize: T.fsXxs, color: tCol, textTransform: 'uppercase', letterSpacing: T.lsWide, fontFamily: "'Courier Prime', monospace", marginBottom: 4 }}>{t.label}</div>
+              <div style={{ fontSize: T.fsSm, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: T.lhNormal }}>{stateTooltip.split(' — ').slice(1).join(' — ')}</div>
+              <div style={{ position: 'absolute', top: -5, right: 10, width: 8, height: 8, background: T.card, border: `1px solid ${T.bdrHi}`, borderBottom: 'none', borderRight: 'none', transform: 'rotate(45deg)' }} />
+            </div>
+          )}
+        </div>
       </div>
       <div style={{ position: 'relative', height: 6, background: barBg, borderRadius: T.radiusSm, overflow: 'visible' }}>
         <div style={{ position: 'absolute', left: fillLeft, width: fillWidth, top: 0, bottom: 0, background: fillColor, transition: 'all 0.6s ease', zIndex: 3 }} />
@@ -2796,15 +3171,7 @@ function StarCard({ star, revealedPassions }) {
             <div style={{ fontSize: T.fsXs, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: T.lsSm }}>Infamy</div>
             <div style={{ height: 3, background: T.bdr, marginTop: 2, borderRadius: T.radiusSm, position: 'relative' }}>
               <div style={{ height: '100%', width: `${star.infamy}%`, background: '#8a1818', borderRadius: T.radiusSm, transition: 'width 0.5s' }} />
-              {star.fame > 0 && star.infamy > 0 && (
-                <div style={{
-                  position: 'absolute', top: 0, bottom: 0,
-                  right: `${100 - star.infamy}%`,
-                  width: `${Math.min(star.fame * FAME_BUFFER_RATIO, star.infamy)}%`,
-                  background: '#c9a14a55', borderRadius: '0 1px 1px 0',
-                  transition: 'all 0.5s',
-                }} />
-              )}
+
             </div>
             <div style={{ fontSize: T.fsXs, color: T.inkMut, fontFamily: "'Courier Prime', monospace" }}>
               {Math.floor(star.infamy)}
@@ -2826,7 +3193,132 @@ function StarCard({ star, revealedPassions }) {
         <div style={{ fontSize: T.fsXs, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: T.lsSm, marginBottom: 3 }}>Their community</div>
         <div style={{ fontSize: T.fsSm, color: T.inkWhy, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.45 }}>{star.community}</div>
       </div>
+
+      {/* Active Effects button */}
+      <ActiveEffectsModal star={star} />
     </div>
+  );
+}
+
+// ─── ACTIVE EFFECTS MODAL ─────────────────────────────────────────────────────
+// Shows all currently active buffs and debuffs for a Star, derived from
+// computeModifiers using the current macropassion and band-capped dominant passion.
+function ActiveEffectsModal({ star }) {
+  const T = useContext(ThemeCtx);
+  const [open, setOpen] = useState(false);
+
+  const macro = macropassionValue(star.passions);
+  const mods = computeModifiers({ [star.id]: star })[star.id];
+  const { fameMult, infamyMult, passionBonus, deltaObscured, cap, cappedDomValue } = mods;
+
+  // Determine dominant passion label after capping
+  const cappedPassions = Object.entries(star.passions).map(([k, p]) => {
+    const v = p.value;
+    const capped = macro >= 0 ? Math.min(v, cap) : Math.max(v, cap);
+    return [k, { ...p, value: capped }];
+  });
+  const dominantEntry = cappedPassions.reduce((a, [k, p]) =>
+    Math.abs(p.value) > Math.abs(a[1].value) ? [k, p] : a, ['', { value: 0, label: '' }]);
+  const dominantPassion = star.passions[dominantEntry[0]];
+  const dominantLabel = dominantPassion?.label ?? '—';
+  const dominantBehavior = dominantPassion?.behaviors
+    ? dominantPassion.behaviors[Object.keys(dominantPassion.behaviors)
+        .map(Number).sort((a,b) => a - b)
+        .reverse().find(k => cappedDomValue >= k) ?? 0]
+    : null;
+
+  const isPositive = macro >= 15;
+  const isNegative = macro <= -15;
+  const isNeutral  = !isPositive && !isNegative;
+
+  const effects = [];
+
+  if (isPositive) {
+    if (fameMult > 1)    effects.push({ label: 'Fame gains', value: `×${fameMult.toFixed(2)}`, col: '#4a8e42', desc: 'Positive actions register more strongly in their world.' });
+    if (infamyMult < 1)  effects.push({ label: 'Infamy gains', value: `×${infamyMult.toFixed(2)}`, col: '#4a8e42', desc: 'Negative actions land more softly — they give you the benefit of the doubt.' });
+    if (passionBonus > 0) effects.push({ label: 'Passion bonus', value: `+${passionBonus} per gain`, col: '#4a8e42', desc: 'Their goodwill amplifies the impact of actions that serve their interests.' });
+    if (!deltaObscured)  effects.push({ label: 'Effect deltas', value: 'Visible', col: '#4a8e42', desc: 'You understand enough about this relationship to read its consequences clearly.' });
+    if (cap < 100)       effects.push({ label: 'Passion ceiling', value: `+${cap} band`, col: T.inkDim, desc: `This relationship is not yet deep enough to unlock the full range of ${dominantLabel} behaviors. Deeper trust required.` });
+  }
+
+  if (isNegative) {
+    if (fameMult < 1)    effects.push({ label: 'Fame gains', value: `×${fameMult.toFixed(2)}`, col: '#9e1a10', desc: 'Your positive actions register less in their world — goodwill is harder to build.' });
+    if (infamyMult > 1)  effects.push({ label: 'Infamy gains', value: `×${infamyMult.toFixed(2)}`, col: '#9e1a10', desc: 'Negative actions land harder — they are watching for exactly this.' });
+    if (deltaObscured)   effects.push({ label: 'Effect deltas', value: 'Hidden', col: '#9e1a10', desc: 'You cannot read the full consequences of actions involving this person.' });
+    if (Math.abs(cap) < 100) effects.push({ label: 'Penalty ceiling', value: `${cap} band`, col: T.inkDim, desc: `Their macropassion hasn't fallen far enough to unlock the full weight of ${dominantLabel} penalties. How far this deteriorates depends on their overall regard for you — not on your other relationships.` });
+  }
+
+  if (isNeutral) {
+    effects.push({ label: 'Status', value: 'Neutral', col: T.inkDim, desc: 'No active modifiers. This relationship has not moved enough in either direction to produce systematic effects.' });
+    // No cap shown for neutral — there are no bonuses to limit
+  }
+
+  if (dominantBehavior && !isNeutral) {
+    effects.push({ label: `Dominant: ${dominantLabel}`, value: '', col: star.color, desc: dominantBehavior, isNarrative: true });
+  }
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        style={{ marginTop: 10, width: '100%', background: 'none', border: `1px solid ${T.bdrHi}`, borderRadius: T.radius, padding: '4px 0', cursor: 'pointer', fontSize: T.fsXxs, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: T.lsWide, transition: 'border-color 0.15s, color 0.15s' }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = star.color; e.currentTarget.style.color = star.color; }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = T.bdrHi; e.currentTarget.style.color = T.inkDim; }}
+      >
+        View Modifiers
+      </button>
+
+      {open && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', background: T.modalBg }} onClick={() => setOpen(false)}>
+          <div style={{ background: T.hdr, border: `1px solid ${star.color}55`, borderRadius: T.radius, padding: T.padModal, width: 340, maxHeight: '78vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, paddingBottom: 12, borderBottom: `1px solid ${T.bdr}` }}>
+              <div>
+                <div style={{ fontSize: T.fsXxs, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: T.lsXWide, marginBottom: 4 }}>Active Modifiers</div>
+                <div style={{ fontSize: T.fsMdLg, color: star.color, fontFamily: "'Playfair Display', serif", fontWeight: 700 }}>{star.name}</div>
+              </div>
+              <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: T.inkDim, cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 0 0 16px', marginTop: -2 }}>×</button>
+            </div>
+
+            {/* Relationship context */}
+            <div style={{ marginBottom: 14, paddingBottom: 12, borderBottom: `1px solid ${T.bdr}` }}>
+              <div style={{ fontSize: T.fsXxs, color: T.inkDim, fontFamily: "'Courier Prime', monospace", textTransform: 'uppercase', letterSpacing: T.lsWide, marginBottom: 5 }}>Current Standing</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontSize: T.fsMd, color: isPositive ? '#4a8e42' : isNegative ? '#9e1a10' : T.inkDim, fontFamily: "'Courier Prime', monospace", fontWeight: 600 }}>
+                  {macropassion(star.passions).label}
+                </span>
+                <span style={{ fontSize: T.fsSm, color: T.inkFaint, fontFamily: "'Courier Prime', monospace" }}>
+                  macro {macropassionValue(star.passions).toFixed(1)}
+                </span>
+              </div>
+              {isNeutral && (
+                <div style={{ fontSize: T.fsSm, color: T.inkFaint, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', marginTop: 5, lineHeight: T.lhSnug }}>
+                  No modifiers active. Neither alliance nor opposition has formed in earnest.
+                </div>
+              )}
+            </div>
+
+            {/* Effect rows */}
+            {effects.filter(eff => eff.label !== 'Status' || !isNeutral).length === 0 && isNeutral ? (
+              <div style={{ fontSize: T.fsSm, color: T.inkFaint, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: T.lhRelaxed }}>
+                This relationship has not yet produced active mechanical effects in either direction.
+              </div>
+            ) : (
+              effects.map((eff, i) => (
+                <div key={i} style={{ marginBottom: 11, paddingBottom: 11, borderBottom: i < effects.length - 1 ? `1px solid ${T.bdrSub}` : 'none' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 3 }}>
+                    <span style={{ fontSize: T.fsMd, color: eff.col, fontFamily: "'Courier Prime', monospace", fontWeight: eff.isNarrative ? 400 : 600 }}>{eff.label}</span>
+                    {eff.value && <span style={{ fontSize: T.fsSm, color: eff.col, fontFamily: "'Courier Prime', monospace" }}>{eff.value}</span>}
+                  </div>
+                  <div style={{ fontSize: T.fsSm, color: T.inkWhy, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: T.lhSnug }}>{eff.desc}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -3243,6 +3735,59 @@ function PassionRevealModal({ revealKey, dispatch }) {
   );
 }
 
+// ─── COHESION EVENT MODAL ─────────────────────────────────────────────────────
+// Fires when ally or enemy cohesion first crosses a meaningful threshold.
+// Styled like StarIntroModal — newspaper voice, describes world shift.
+function CohesionEventModal({ event, dispatch }) {
+  const T = useContext(ThemeCtx);
+  if (!event) return null;
+  const isAlly   = event.type === 'ally';
+  const text     = COHESION_EVENT_TEXT[event.type][event.threshold];
+  const accentCol = isAlly ? '#4a8e42' : '#9e1a10';
+  const borderCol = isAlly ? '#4a8e4299' : '#9e1a1099';
+  const label    = isAlly ? 'The Valley Aligns' : 'Opposition Consolidates';
+  const dateline = `${SCENARIO.paperName} · ${event.season}, ${event.year}`;
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 210, zoom: 0.75, background: T.modalBg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ maxWidth: 480, width: '100%', background: T.hdr, border: `1px solid ${borderCol}`, borderTop: `3px solid ${accentCol}`, padding: T.padModal, animation: 'fadeInModal 0.45s ease-out forwards', boxShadow: '0 12px 48px rgba(0,0,0,0.4)' }}>
+
+        {/* Label row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: T.gapMd, marginBottom: 14 }}>
+          <div style={{ fontSize: T.fsXxs, color: accentCol, textTransform: 'uppercase', letterSpacing: T.lsXWide, fontFamily: "'Courier Prime', monospace" }}>
+            {label}
+          </div>
+          <div style={{ flex: 1, height: 1, background: accentCol, opacity: 0.3 }} />
+          <div style={{ fontSize: T.fsSm, color: accentCol, fontFamily: "'Courier Prime', monospace", fontWeight: 700 }}>
+            {isAlly ? 'Ally' : 'Enemy'} Cohesion ≥ {event.threshold}
+          </div>
+        </div>
+
+        {/* Headline */}
+        <div style={{ fontSize: 22, color: T.ink, fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.15, marginBottom: 16 }}>{text.headline}</div>
+
+        {/* Body */}
+        <div style={{ fontSize: T.fsBase, color: T.inkMut, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.75, marginBottom: 18, paddingBottom: 14, borderBottom: `1px solid ${T.bdr}` }}>{text.body}</div>
+
+        {/* Dateline */}
+        <div style={{ fontSize: T.fsXs, color: T.inkFaint, fontFamily: "'Courier Prime', monospace", fontStyle: 'italic', lineHeight: 1.6, marginBottom: 20, borderLeft: `2px solid ${T.bdrHi}`, paddingLeft: 8 }}>
+          ✦ {dateline}
+        </div>
+
+        {/* Continue */}
+        <button
+          onClick={() => dispatch({ type: 'DISMISS_COHESION_EVENT' })}
+          style={{ background: 'transparent', border: `1px solid ${accentCol}`, color: accentCol, padding: '10px 18px', fontFamily: "'Courier Prime', monospace", fontSize: T.fsSm, cursor: 'pointer', letterSpacing: T.lsWide, textTransform: 'uppercase', borderRadius: T.radius, width: '100%', transition: 'background 0.15s, color 0.15s' }}
+          onMouseEnter={e => { e.currentTarget.style.background = accentCol; e.currentTarget.style.color = T.hdr; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = accentCol; }}>
+          Understood →
+        </button>
+
+      </div>
+    </div>
+  );
+}
+
 function GuestModal({ guest, dispatch }) {
   const T = useContext(ThemeCtx);
   return (
@@ -3539,10 +4084,18 @@ export default function ManifestGame() {
       return true;
     });
   const newThisTurn = new Set(allPlayable.filter(a => !state.seenActions.includes(a.id)).map(a => a.id));
+  // Sort order: new-this-turn first, then by recency of first appearance (position in seenActions,
+  // later index = appeared more recently = higher priority), then by ya as tiebreaker.
   const playable = [...allPlayable].sort((a, b) => {
-    const aNew = newThisTurn.has(a.id) ? 1 : 0;
-    const bNew = newThisTurn.has(b.id) ? 1 : 0;
-    if (bNew !== aNew) return bNew - aNew;
+    const aNew = newThisTurn.has(a.id);
+    const bNew = newThisTurn.has(b.id);
+    // New cards always float to top
+    if (aNew !== bNew) return aNew ? -1 : 1;
+    // Among seen cards: later seenActions index = more recently surfaced = sort first
+    const aIdx = state.seenActions.indexOf(a.id);
+    const bIdx = state.seenActions.indexOf(b.id);
+    if (aIdx !== bIdx) return bIdx - aIdx;
+    // Final tiebreaker: later ya (more recently unlocked by year)
     return (b.ya ?? 0) - (a.ya ?? 0);
   });
   // revealed — authoritative list of star IDs visible to the player.
@@ -3626,6 +4179,9 @@ export default function ManifestGame() {
       {state.pendingReveal.length > 0 && !state.ruined && !state.won && !state.obscured && (
         <PassionRevealModal revealKey={state.pendingReveal[0]} dispatch={dispatch} />
       )}
+      {(state.pendingCohesionEvents?.length ?? 0) > 0 && !state.ruined && !state.won && !state.obscured && !state.pendingIntros.length && !state.pendingReveal.length && (
+        <CohesionEventModal event={state.pendingCohesionEvents[0]} dispatch={dispatch} />
+      )}
       {state.pendingGuest && !state.ruined && !state.won && !state.obscured && (
         <GuestModal guest={state.pendingGuest} dispatch={dispatch} />
       )}
@@ -3691,6 +4247,7 @@ export default function ManifestGame() {
           {/* PERSONS */}
           <div style={{ width: 248, borderRight: `1px solid ${T.bdr}`, padding: '14px 10px', overflowY: 'auto', flexShrink: 0, minHeight: 0, background: T.surf }}>
             <div style={{ fontSize: T.fsXxs, color: T.inkDim, textTransform: 'uppercase', letterSpacing: T.lsXWide, marginBottom: 10, paddingBottom: 6, borderBottom: `1px solid ${T.bdr}` }}>{SCENARIO.panelStars}</div>
+            {revealed.length > 0 && <CohesionBars stars={state.stars} everShown={state.cohesionEverShown ?? { ally: false, enemy: false }} />}
             {Object.values(state.stars).filter(s => revealed.includes(s.id)).map(s => <StarCard key={s.id} star={s} revealedPassions={state.revealedPassions} />)}
             <HomesteadPanel homesteadLog={state.homesteadLog} />
           </div>
