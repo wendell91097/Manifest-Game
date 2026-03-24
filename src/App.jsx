@@ -1216,14 +1216,23 @@ const PASSION_REVEAL_DIALOGUES = {
 
 // ─── REACTIVE EVENTS ─────────────────────────────────────────────────────────
 // Fire automatically when a passion crosses a threshold.
-// direction: 'above' fires when value rises past threshold, 'below' when it falls past.
+// Conditions are declared as trigger objects — the engine reads nothing off the
+// event directly; all evaluation goes through resolveReactiveTrigger().
+//
+// trigger fields:
+//   star      — which Star to watch
+//   passion   — which passion on that Star to watch
+//   threshold — value to cross
+//   direction — 'above' (value rises past threshold) | 'below' (value falls past)
+//   macroMin  — optional: fires only if macropassion >= this value (warm relationship gate)
+//   macroMax  — optional: fires only if macropassion <= this value (cold relationship gate)
+//
 // unlocksActions: IDs of actions added to the player's pool when this fires.
 
 const REACTIVE_EVENTS = [
   {
     id: 're_esperanza_trust_hostile',
-    star: 'esperanza', passion: 'trust', threshold: -50, direction: 'below',
-    requiresMacropassionMax: -15, // complaint only fires if relationship is Clear Competitor or worse
+    trigger: { star: 'esperanza', passion: 'trust', threshold: -50, direction: 'below', macroMax: -15 },
     headline: 'VALLEJO FILES FORMAL COMPLAINT — Settler named in public land dispute.',
     body: "Esperanza Vallejo has filed a formal complaint with the territorial court naming a local landholder as party to disputed boundary claims. She cited a pattern of actions working against Californio land interests. The filing is now public record.",
     effects: [
@@ -1236,8 +1245,7 @@ const REACTIVE_EVENTS = [
   },
   {
     id: 're_esperanza_trust_ally',
-    star: 'esperanza', passion: 'trust', threshold: 50, direction: 'above',
-    requiresMacropassion: 30, // archive only opens if the overall relationship is Friendly Neighbor or better
+    trigger: { star: 'esperanza', passion: 'trust', threshold: 50, direction: 'above', macroMin: 30 },
     headline: 'VALLEJO OPENS COALITION ARCHIVE — Settler granted access to Californio land records.',
     body: "Esperanza Vallejo has granted a local settler access to the coalition's private land archive — the first Anglo to be so trusted. The records document boundary claims predating American annexation. What is done with them is yet to be seen.",
     effects: [],
@@ -1248,8 +1256,7 @@ const REACTIVE_EVENTS = [
   },
   {
     id: 're_solomon_autonomy_hostile',
-    star: 'solomon', passion: 'autonomy', threshold: -50, direction: 'below',
-    requiresMacropassionMax: -15, // account restriction only fires if relationship is Clear Competitor or worse
+    trigger: { star: 'solomon', passion: 'autonomy', threshold: -50, direction: 'below', macroMax: -15 },
     headline: "REED'S POST RESTRICTS CERTAIN ACCOUNTS — Trader quietly closes access to known railroad associates.",
     body: "Solomon Reed has quietly stopped doing business with several valley landholders, citing concerns about federal entanglement. He did not publish a list. He did not need to. People who trade at the post know who is no longer welcome.",
     effects: [],
@@ -1260,8 +1267,7 @@ const REACTIVE_EVENTS = [
   },
   {
     id: 're_solomon_caleb_found',
-    star: 'solomon', passion: 'caleb', threshold: 50, direction: 'above',
-    requiresMacropassion: 15, // Nevada contacts only shared if relationship is Cautious Friend or better
+    trigger: { star: 'solomon', passion: 'caleb', threshold: 50, direction: 'above', macroMin: 15 },
     headline: "CALEB REED RETURNS TO THE VALLEY — Freedman's brother arrives with Nevada contacts.",
     body: "Solomon Reed has word that his brother Caleb is alive and located in the Nevada silver territory — and that he knows men who move money outside federal channels. The contacts exist. Solomon is not yet sharing them freely, but for the right person, the door is open.",
     effects: [],
@@ -1272,8 +1278,7 @@ const REACTIVE_EVENTS = [
   },
   {
     id: 're_whitmore_standing_promoted',
-    star: 'whitmore', passion: 'standing', threshold: 75, direction: 'above',
-    requiresMacropassion: 30, // promotion benefits you only if relationship is Friendly Neighbor or better
+    trigger: { star: 'whitmore', passion: 'standing', threshold: 75, direction: 'above', macroMin: 30 },
     headline: 'WHITMORE NAMED DISTRICT SUPERVISOR — Pacific Railroad elevates northern corridor lead.',
     body: "J.T. Whitmore has been named District Supervisor for the northern corridor, bringing with him full company authority over land filings in the valley. His promotion is a direct consequence of his progress here. The company now acts through him with considerably more force.",
     effects: [
@@ -1286,7 +1291,7 @@ const REACTIVE_EVENTS = [
   },
   {
     id: 're_whitmore_route_stalled',
-    star: 'whitmore', passion: 'corridor', threshold: -50, direction: 'below',
+    trigger: { star: 'whitmore', passion: 'corridor', threshold: -50, direction: 'below' },
     headline: 'COMPANY SENDS AUDITOR NORTH — Pacific Railroad reviews corridor progress.',
     body: "Pacific Railroad has dispatched an internal auditor to review the northern survey's progress. Whitmore met the auditor's stage alone. What was said between them is not public. What follows from it will be.",
     effects: [
@@ -1299,7 +1304,7 @@ const REACTIVE_EVENTS = [
   },
   {
     id: 're_whitmore_margaret_breaking',
-    star: 'whitmore', passion: 'margaret', threshold: -50, direction: 'below',
+    trigger: { star: 'whitmore', passion: 'margaret', threshold: -50, direction: 'below' },
     headline: "WHITMORE PUSHES UNAUTHORIZED SURVEY NORTH — Corridor progress accelerates beyond company sanction.",
     body: "J.T. Whitmore has ordered survey crews onto contested parcels without waiting for the federal filings that would legitimize the work. The move advances the corridor timeline but creates legal exposure the company did not authorize. His personal correspondence east has reportedly gone unanswered for some months.",
     effects: [
@@ -1375,16 +1380,84 @@ const UNLOCKABLE_ACTIONS = [
   },
 ];
 
-// ─── CONVERGENCE EVENTS ───────────────────────────────────────────────────────
+// ─── INTERESTS ───────────────────────────────────────────────────────────────────────────────
+// Named graph of stakes across (or within) Stars. Consumed by convergence event
+// triggers — keeps star IDs in the content layer, out of the engine.
+//
+// type: 'competing' — both parties rising creates collision pressure.
+//                     Convergence fires when they can no longer coexist.
+// type: 'aligned'   — both parties carrying weight creates opportunity.
+//                     Convergence fires when alignment becomes actionable.
+// type: 'internal'  — tension between two passions on the same Star.
+//                     Convergence fires when both reach a point where they
+//                     cannot both be fully served.
+//
+// party fields:
+//   star     — Star ID (content layer only)
+//   passion  — passion key on that Star
+//   useAbs   — if true, value is evaluated as Math.abs(value). Fires when the
+//              passion has significant weight in EITHER direction.
+
+const INTERESTS = {
+
+  // ── COMPETING ───────────────────────────────────────────────────────────────────
+
+  land_vs_corridor: {
+    type: 'competing',
+    label: 'Land Grant vs. Railroad Corridor',
+    description: "Esperanza's claim and Whitmore's corridor cannot both fully succeed. As each advances, direct confrontation becomes unavoidable.",
+    parties: [
+      { star: 'esperanza', passion: 'land'     },
+      { star: 'whitmore',  passion: 'corridor' },
+    ],
+  },
+
+  // ── ALIGNED ───────────────────────────────────────────────────────────────────
+
+  coalition_and_independence: {
+    type: 'aligned',
+    label: 'Coalition & Trading Independence',
+    description: "Esperanza's coalition and Solomon's trading independence have built toward the same frontier. When both have real weight, they can see each other across it.",
+    parties: [
+      { star: 'esperanza', passion: 'coalition' },
+      // useAbs: true — fires whether Solomon's autonomy is strongly built (+) OR
+      // strongly compromised (−). Both states create the same pressure —
+      // coalition as an asset if thriving, a lifeline if not.
+      { star: 'solomon',   passion: 'autonomy', useAbs: true },
+    ],
+  },
+
+  // ── INTERNAL ───────────────────────────────────────────────────────────────────
+
+  whitmore_divided: {
+    type: 'internal',
+    label: "The Surveyor's Division",
+    description: "Whitmore's corridor ambition and his neglected marriage are both approaching a point of no return. The player is the only person positioned to influence which one he addresses.",
+    parties: [
+      { star: 'whitmore', passion: 'corridor' },
+      { star: 'whitmore', passion: 'margaret' },
+    ],
+  },
+
+};
+
+// ─── CONVERGENCE EVENTS ────────────────────────────────────────────────────────────────────────────
 // Fire when a condition across Stars is met. Push a forced choice to pendingChoices[].
+// Conditions are declared as trigger objects — the engine reads nothing off the
+// event directly; all evaluation goes through resolveCondition().
+//
+// trigger types:
+//   'interest' — resolves via INTERESTS graph. Every party in the named interest
+//                must reach minValue (or |value| if useAbs on that party).
+//   'macroAll' — every *revealed* Star must have |macropassion| >= minAbsMacro.
+//                Scales automatically to any number of Stars.
+//
 // choices: array of { label, desc, effects[], fameEffects, infamyEffects }
 
 const CONVERGENCE_EVENTS = [
   {
     id: 'conv_land_corridor',
-    condition: (stars) =>
-      stars.esperanza.passions.land.value >= 30 &&
-      stars.whitmore.passions.corridor.value >= 30,
+    trigger: { type: 'interest', interest: 'land_vs_corridor', minValue: 30 },
     headline: 'THE NORTHERN BOUNDARY — A Direct Confrontation',
     body: "Esperanza Vallejo and J.T. Whitmore have both called on you in the same week regarding the same strip of land. The northern parcel sits directly across the railroad's planned route. Esperanza holds a surveyed claim. Whitmore holds a federal filing. They cannot both be right. They both know which way you have leaned. Now they want to know which way you will stand.",
     choices: [
@@ -1429,9 +1502,7 @@ const CONVERGENCE_EVENTS = [
   },
   {
     id: 'conv_solomon_coalition',
-    condition: (stars) =>
-      Math.abs(stars.solomon.passions.autonomy.value) >= 30 &&
-      stars.esperanza.passions.coalition.value >= 30,
+    trigger: { type: 'interest', interest: 'coalition_and_independence', minValue: 30 },
     headline: 'AN UNLIKELY MEETING — Reed and Vallejo',
     body: "Solomon Reed and Esperanza Vallejo have separately asked you to arrange a meeting between them. Solomon's trading independence and Esperanza's coalition have both grown significant enough that each sees something the other has. She wants his routes as an alternative to the federal commerce system. He wants her legal network as protection the post could not otherwise afford. They have never spoken directly. You are the only person both of them trust. Facilitating this changes all three relationships. So does refusing.",
     choices: [
@@ -1463,9 +1534,7 @@ const CONVERGENCE_EVENTS = [
   },
   {
     id: 'conv_whitmore_personal',
-    condition: (stars) =>
-      stars.whitmore.passions.margaret.value >= 30 &&
-      stars.whitmore.passions.corridor.value >= 30,
+    trigger: { type: 'interest', interest: 'whitmore_divided', minValue: 30 },
     headline: "THE SURVEYOR'S LETTER — Whitmore asks something off the record",
     body: "J.T. Whitmore has asked you, quietly and without preamble, for help drafting a letter to his wife in Cincinnati. He has been in the valley for three years. He has words for federal filings but not for her. He also needs your name on a corridor extension before the Sacramento office closes at the end of the month. He hasn't connected the two requests out loud. He doesn't have to.",
     choices: [
@@ -1509,13 +1578,7 @@ const CONVERGENCE_EVENTS = [
   },
   {
     id: 'conv_three_star_reckoning',
-    condition: (stars, taken, state) => {
-      // Whitmore must be visible in Persons — his Star ya tick must have passed.
-      const whitmoreRevealed = state?.revealedStars?.includes('whitmore') ?? false;
-      const absMacro = s => Math.abs(macropassionValue(s.passions));
-      return whitmoreRevealed &&
-        absMacro(stars.esperanza) >= 30 && absMacro(stars.solomon) >= 30 && absMacro(stars.whitmore) >= 30;
-    },
+    trigger: { type: 'macroAll', minAbsMacro: 30 },
     headline: 'THREE LETTERS IN ONE WEEK — All of them need something.',
     bodyFn: (taken, declined) => taken.includes('lend_solomon') && !declined.includes('lend_solomon')
       ? "Three letters arrive in the same week. Esperanza Vallejo needs a witness at a boundary hearing in Sacramento — the case that will determine whether the grant survives the decade. Solomon Reed needs help navigating a federal challenge to his warehouse deed before the territorial office closes its docket; the post he built with your loan is now at legal risk. J.T. Whitmore needs your name on a critical corridor extension before it lapses. Each of them knows you are the right person for what they need. None of them knows about the other two letters. You cannot be in three places at once. The two you don't answer will remember your absence in different ways."
@@ -2273,6 +2336,155 @@ function applyFI(stars, fameEff, infamyEff, tick = null) {
 }
 
 // Check reactive and convergence events after any state mutation
+// ─── CONDITION RESOLVERS ───────────────────────────────────────────────────────────────────────────
+// Two parallel resolvers — one per event system. Neither contains star IDs
+// or passion keys. All content identifiers live in the trigger objects declared
+// in REACTIVE_EVENTS and CONVERGENCE_EVENTS.
+
+// resolveReactiveTrigger — for REACTIVE_EVENTS
+// Handles threshold crossing + optional macropassion gates on the same star.
+// prevStars is required: crossing is a change in state, not a static check.
+function resolveReactiveTrigger(trigger, stars, prevStars) {
+  const prev = prevStars[trigger.star]?.passions[trigger.passion]?.value ?? 0;
+  const curr =     stars[trigger.star]?.passions[trigger.passion]?.value ?? 0;
+
+  const crossed = trigger.direction === 'above'
+    ? (prev < trigger.threshold && curr >= trigger.threshold)
+    : (prev > trigger.threshold && curr <= trigger.threshold);
+
+  if (!crossed) return false;
+
+  // macroMin: fires only if overall relationship is warm enough (positive gate)
+  if (trigger.macroMin !== undefined) {
+    if (macropassionValue(stars[trigger.star].passions) < trigger.macroMin) return false;
+  }
+  // macroMax: fires only if overall relationship is cold enough (negative gate)
+  if (trigger.macroMax !== undefined) {
+    if (macropassionValue(stars[trigger.star].passions) > trigger.macroMax) return false;
+  }
+
+  return true;
+}
+
+// resolveCondition — for CONVERGENCE_EVENTS
+// Dispatches to a sub-resolver based on trigger.type. Extensible: add new
+// trigger types here without touching CONVERGENCE_EVENTS or the reducer.
+function resolveInterestCondition(trigger, stars) {
+  const interest = INTERESTS[trigger.interest];
+  if (!interest) {
+    console.warn(\`resolveCondition: unknown interest "\${trigger.interest}"\`);
+    return false;
+  }
+  return interest.parties.every(party => {
+    const raw = stars[party.star]?.passions[party.passion]?.value ?? 0;
+    const value = party.useAbs ? Math.abs(raw) : raw;
+    return value >= trigger.minValue;
+  });
+}
+
+function resolveMacroAll(trigger, stars, state) {
+  const revealed = state?.revealedStars ?? [];
+  if (revealed.length === 0) return false;
+  return revealed.every(id => {
+    const star = stars[id];
+    if (!star) return false;
+    return Math.abs(macropassionValue(star.passions)) >= trigger.minAbsMacro;
+  });
+}
+
+function resolveCondition(trigger, stars, state) {
+  if (!trigger) return false;
+  switch (trigger.type) {
+    case 'interest': return resolveInterestCondition(trigger, stars);
+    case 'macroAll': return resolveMacroAll(trigger, stars, state);
+    default:
+      console.warn(\`resolveCondition: unknown trigger type "\${trigger.type}"\`);
+      return false;
+  }
+}
+
+
+// ─── CONDITION RESOLVERS ──────────────────────────────────────────────────────────────
+// Two parallel resolver families — one for reactive events (single-star passion
+// crossing), one for convergence events (multi-star or macro conditions).
+// The engine layer (checkEvents) calls only these functions; it reads zero
+// content identifiers (no star IDs, no passion keys) directly off events.
+
+// ── REACTIVE TRIGGER RESOLVER ─────────────────────────────────────────────────────
+// Handles the threshold crossing check and optional macropassion gates.
+// prevStars is required — a crossing is a change in state, not a static value.
+//
+// trigger fields evaluated here:
+//   star, passion, threshold, direction  — the crossing spec
+//   macroMin  — optional: fires only if macropassion >= this (warm relationship gate)
+//   macroMax  — optional: fires only if macropassion <= this (cold relationship gate)
+
+function resolveReactiveTrigger(trigger, stars, prevStars) {
+  const prev = prevStars[trigger.star]?.passions[trigger.passion]?.value ?? 0;
+  const curr =     stars[trigger.star]?.passions[trigger.passion]?.value ?? 0;
+
+  const crossed = trigger.direction === 'above'
+    ? (prev < trigger.threshold && curr >= trigger.threshold)
+    : (prev > trigger.threshold && curr <= trigger.threshold);
+
+  if (!crossed) return false;
+
+  if (trigger.macroMin !== undefined) {
+    const macro = macropassionValue(stars[trigger.star].passions);
+    if (macro < trigger.macroMin) return false;
+  }
+  if (trigger.macroMax !== undefined) {
+    const macro = macropassionValue(stars[trigger.star].passions);
+    if (macro > trigger.macroMax) return false;
+  }
+
+  return true;
+}
+
+// ── CONVERGENCE TRIGGER RESOLVERS ─────────────────────────────────────────────────
+// resolveCondition dispatches to a sub-resolver based on trigger.type.
+// Adding a new trigger type requires only a new sub-resolver here —
+// CONVERGENCE_EVENTS and the reducer are untouched.
+//
+// 'interest' — every party in the named INTERESTS entry must reach minValue.
+//              Respects useAbs: true on individual parties.
+// 'macroAll' — every revealed Star must have |macropassion| >= minAbsMacro.
+//              Uses state.revealedStars so un-introduced Stars are excluded.
+
+function resolveInterestCondition(trigger, stars) {
+  const interest = INTERESTS[trigger.interest];
+  if (!interest) {
+    console.warn(\`resolveCondition: unknown interest "\${trigger.interest}"\`);
+    return false;
+  }
+  return interest.parties.every(party => {
+    const raw = stars[party.star]?.passions[party.passion]?.value ?? 0;
+    const value = party.useAbs ? Math.abs(raw) : raw;
+    return value >= trigger.minValue;
+  });
+}
+
+function resolveMacroAll(trigger, stars, state) {
+  const revealed = state?.revealedStars ?? [];
+  if (revealed.length === 0) return false;
+  return revealed.every(id => {
+    const star = stars[id];
+    if (!star) return false;
+    return Math.abs(macropassionValue(star.passions)) >= trigger.minAbsMacro;
+  });
+}
+
+function resolveCondition(trigger, stars, state) {
+  if (!trigger) return false;
+  switch (trigger.type) {
+    case 'interest': return resolveInterestCondition(trigger, stars);
+    case 'macroAll': return resolveMacroAll(trigger, stars, state);
+    default:
+      console.warn(\`resolveCondition: unknown trigger type "\${trigger.type}"\`);
+      return false;
+  }
+}
+
 function checkEvents(state, prevStars, newLog) {
   let { stars, firedEvents, pendingChoices, unlockedActions, log } = state;
   const newEntries = [...newLog];
@@ -2282,22 +2494,7 @@ function checkEvents(state, prevStars, newLog) {
   // Reactive events
   for (const ev of REACTIVE_EVENTS) {
     if (fired.includes(ev.id)) continue;
-    const prev = prevStars[ev.star]?.passions[ev.passion]?.value ?? 0;
-    const curr = stars[ev.star]?.passions[ev.passion]?.value ?? 0;
-    const crossed = ev.direction === 'above' ? (prev < ev.threshold && curr >= ev.threshold)
-                                              : (prev > ev.threshold && curr <= ev.threshold);
-    if (!crossed) continue;
-    // Macropassion gates — a single passion threshold alone isn't sufficient context.
-    // requiresMacropassion: minimum — positive unlocks require a warm overall relationship.
-    // requiresMacropassionMax: maximum — negative consequences require a cold one.
-    if (ev.requiresMacropassion !== undefined) {
-      const macro = macropassionValue(stars[ev.star].passions);
-      if (macro < ev.requiresMacropassion) continue;
-    }
-    if (ev.requiresMacropassionMax !== undefined) {
-      const macro = macropassionValue(stars[ev.star].passions);
-      if (macro > ev.requiresMacropassionMax) continue;
-    }
+    if (!resolveReactiveTrigger(ev.trigger, stars, prevStars)) continue;
     fired.push(ev.id);
     if (ev.effects.length) stars = applyE(stars, ev.effects);
     stars = applyFI(stars, ev.fameEffects, ev.infamyEffects, `${state.year}-${state.season}`);
@@ -2318,7 +2515,7 @@ function checkEvents(state, prevStars, newLog) {
   for (const ev of CONVERGENCE_EVENTS) {
     if (fired.includes(ev.id)) continue;
     if (pending.find(p => p.id === ev.id)) continue;
-    if (!ev.condition(stars, state.taken, state)) continue;
+    if (!resolveCondition(ev.trigger, stars, state)) continue;
     fired.push(ev.id);
     const resolvedBody = typeof ev.bodyFn === 'function' ? ev.bodyFn(state.taken, state.declined) : ev.body;
     const resolvedChoices = ev.choices.map(c => ({
