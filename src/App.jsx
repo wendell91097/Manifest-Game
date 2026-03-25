@@ -2372,7 +2372,7 @@ function resolveReactiveTrigger(trigger, stars, prevStars) {
 function resolveInterestCondition(trigger, stars) {
   const interest = INTERESTS[trigger.interest];
   if (!interest) {
-    console.warn(\`resolveCondition: unknown interest "\${trigger.interest}"\`);
+    console.warn(`resolveCondition: unknown interest "${trigger.interest}"`);
     return false;
   }
   return interest.parties.every(party => {
@@ -2398,92 +2398,11 @@ function resolveCondition(trigger, stars, state) {
     case 'interest': return resolveInterestCondition(trigger, stars);
     case 'macroAll': return resolveMacroAll(trigger, stars, state);
     default:
-      console.warn(\`resolveCondition: unknown trigger type "\${trigger.type}"\`);
+      console.warn(`resolveCondition: unknown trigger type "${trigger.type}"`);
       return false;
   }
 }
 
-
-// ─── CONDITION RESOLVERS ──────────────────────────────────────────────────────────────
-// Two parallel resolver families — one for reactive events (single-star passion
-// crossing), one for convergence events (multi-star or macro conditions).
-// The engine layer (checkEvents) calls only these functions; it reads zero
-// content identifiers (no star IDs, no passion keys) directly off events.
-
-// ── REACTIVE TRIGGER RESOLVER ─────────────────────────────────────────────────────
-// Handles the threshold crossing check and optional macropassion gates.
-// prevStars is required — a crossing is a change in state, not a static value.
-//
-// trigger fields evaluated here:
-//   star, passion, threshold, direction  — the crossing spec
-//   macroMin  — optional: fires only if macropassion >= this (warm relationship gate)
-//   macroMax  — optional: fires only if macropassion <= this (cold relationship gate)
-
-function resolveReactiveTrigger(trigger, stars, prevStars) {
-  const prev = prevStars[trigger.star]?.passions[trigger.passion]?.value ?? 0;
-  const curr =     stars[trigger.star]?.passions[trigger.passion]?.value ?? 0;
-
-  const crossed = trigger.direction === 'above'
-    ? (prev < trigger.threshold && curr >= trigger.threshold)
-    : (prev > trigger.threshold && curr <= trigger.threshold);
-
-  if (!crossed) return false;
-
-  if (trigger.macroMin !== undefined) {
-    const macro = macropassionValue(stars[trigger.star].passions);
-    if (macro < trigger.macroMin) return false;
-  }
-  if (trigger.macroMax !== undefined) {
-    const macro = macropassionValue(stars[trigger.star].passions);
-    if (macro > trigger.macroMax) return false;
-  }
-
-  return true;
-}
-
-// ── CONVERGENCE TRIGGER RESOLVERS ─────────────────────────────────────────────────
-// resolveCondition dispatches to a sub-resolver based on trigger.type.
-// Adding a new trigger type requires only a new sub-resolver here —
-// CONVERGENCE_EVENTS and the reducer are untouched.
-//
-// 'interest' — every party in the named INTERESTS entry must reach minValue.
-//              Respects useAbs: true on individual parties.
-// 'macroAll' — every revealed Star must have |macropassion| >= minAbsMacro.
-//              Uses state.revealedStars so un-introduced Stars are excluded.
-
-function resolveInterestCondition(trigger, stars) {
-  const interest = INTERESTS[trigger.interest];
-  if (!interest) {
-    console.warn(\`resolveCondition: unknown interest "\${trigger.interest}"\`);
-    return false;
-  }
-  return interest.parties.every(party => {
-    const raw = stars[party.star]?.passions[party.passion]?.value ?? 0;
-    const value = party.useAbs ? Math.abs(raw) : raw;
-    return value >= trigger.minValue;
-  });
-}
-
-function resolveMacroAll(trigger, stars, state) {
-  const revealed = state?.revealedStars ?? [];
-  if (revealed.length === 0) return false;
-  return revealed.every(id => {
-    const star = stars[id];
-    if (!star) return false;
-    return Math.abs(macropassionValue(star.passions)) >= trigger.minAbsMacro;
-  });
-}
-
-function resolveCondition(trigger, stars, state) {
-  if (!trigger) return false;
-  switch (trigger.type) {
-    case 'interest': return resolveInterestCondition(trigger, stars);
-    case 'macroAll': return resolveMacroAll(trigger, stars, state);
-    default:
-      console.warn(\`resolveCondition: unknown trigger type "\${trigger.type}"\`);
-      return false;
-  }
-}
 
 function checkEvents(state, prevStars, newLog) {
   let { stars, firedEvents, pendingChoices, unlockedActions, log } = state;
@@ -2764,20 +2683,22 @@ function reducer(state, action) {
     const newDecisionTick = deferredFired ? 0 : state.decisionTick + 1;
 
     // ── Passion decay ────────────────────────────────────────────────────────────
-    // Macropassion-gated, bidirectional. Rates from the design table:
+    // Macropassion-gated, bidirectional. Positive and negative decay are mirrors:
     //
-    //  Band           posRate  posFloor  negRate  negFloor
-    //  ≥  50          0        null      2.0      -15      deep ally: positives locked, negatives heal fast
-    //  ≥  30          0.25     null      1.5      -30      ally: positives barely erode, negatives heal
-    //  ≥  15          0.5      null      1.25     -50      cautious: moderate both ways
-    //  -15 to +15     0.75     null      0.75     null     neutral: symmetric drift toward zero
-    //  ≤ -15          1.0      null      0.5      null     competitor: positives erode, negatives locked
-    //  ≤ -30          1.25     null      0.25     null     opponent: positives erode faster, negatives very locked
-    //  ≤ -50          2.0      null      0        null     deep enemy: positives deleted fast, negatives permanent
+    //  Band           posRate  negRate  negFloor
+    //  ≥  50          0        2.0      -15      deep ally: positives locked, negatives heal fast to floor
+    //  ≥  30          0.25     1.5      -30      ally: positives barely erode, negatives heal to floor
+    //  ≥  15          0.5      1.25     -50      cautious: moderate both ways, negatives heal to floor
+    //  -15 to +15     0.75     0.75     null     neutral: symmetric drift all the way to zero
+    //  ≤ -15          1.0      0.5      null     competitor: positives erode, negatives also decay toward 0
+    //  ≤ -30          1.25     0.25     null     opponent: positives erode faster, negatives decay slowly
+    //  ≤ -50          2.0      0        null     deep enemy: positives deleted fast, negatives permanent
     //
-    // negFloor: null on enemy bands means negative passions do NOT auto-repair —
-    //   the relationship stays hostile without player action. negFloor on ally bands
-    //   means minor negatives heal up to that floor automatically.
+    // Positive erosion always drifts toward 0 at posRate (deep ally locks at posRate=0).
+    // Negative decay mirrors this exactly:
+    //   - Ally bands: negatives heal toward 0 but stop at negFloor (floor protects deep damage).
+    //   - Neutral/enemy bands: negatives drift all the way to 0 at negRate.
+    //   - Deep enemy: negRate=0 — locked, no auto-repair without player action.
     //
 
     const currentTick = `${state.year}-${state.season}`;
@@ -2806,43 +2727,36 @@ function reducer(state, action) {
       }
 
       // Passion values.
-      // negFloor semantics: on ally bands it is a repair ceiling (negatives heal up to this floor).
-      //   null on ALLY bands (neutral) means repair all the way to 0 — full drift toward zero.
-      //   null on ENEMY bands means NO repair at all — hostility is locked without player action.
-      // The band table encodes this correctly: ally/neutral bands have negRate > 0 only when
-      // negFloor is set OR the band is neutral (repair to 0). Enemy bands have negFloor = null
-      // AND we must NOT repair. So the repair rule is: only repair if negFloor is explicitly set
-      // (ally bands), OR if we are in the neutral band (macro > -15) where both drift to zero.
-      const isNeutralBand = macro > -15 && macro < 15;
+      // Positive erosion: always drifts toward 0 at posRate. Deep ally (posRate=0) locks it.
+      // Negative decay mirrors this:
+      //   Ally bands (negFloor set): heals toward 0 but stops at negFloor — deep damage needs player action.
+      //   Neutral + enemy bands (negFloor null): drifts all the way to 0 at negRate.
+      //   Deep enemy (negRate=0): locked, no auto-repair.
       for (const passion of Object.values(st.passions)) {
         const v = passion.value;
         // Positive erosion — always toward 0
         if (v > 0 && posRate > 0) passion.value = Math.max(0, v - posRate);
-        // Negative repair — only on ally bands (negFloor set) or neutral band (drift to 0)
+        // Negative decay — mirrors positive erosion; locked only at deep enemy (negRate=0)
         if (v < 0 && negRate > 0) {
-          if (negFloor !== null && v > negFloor) {
-            // Ally band: repair up to the floor ceiling
-            passion.value = Math.min(0, v + negRate);
-          } else if (isNeutralBand) {
-            // Neutral: drift all the way back to 0
+          if (negFloor !== null) {
+            // Ally band: heal toward 0, but only if above the floor (deep damage stays)
+            if (v > negFloor) passion.value = Math.min(0, v + negRate);
+          } else {
+            // Neutral and enemy bands: drift all the way to 0
             passion.value = Math.min(0, v + negRate);
           }
-          // Enemy bands (negFloor === null, !isNeutralBand): no repair
         }
       }
 
       // Fame mirrors positive passions: decays at posRate.
       //   Deep ally (posRate = 0): fame locked in place.
-      //   Deep enemy (posRate = 2.0): residual fame erodes fast, removing any dampening of enemy cohesion.
+      //   Deep enemy (posRate = 2.0): residual fame erodes fast.
       //
-      // Infamy mirrors negative passions: only decays when the band allows negative healing.
-      //   Enemy bands (negRate = 0, or hostile bands with negFloor = null): infamy locked — as permanent as the hostility.
-      //   Ally/neutral bands (negRate > 0): infamy heals at negRate alongside the negative passions.
+      // Infamy mirrors negative passions: decays at negRate on all bands except deep enemy (negRate=0).
       //
       // Grace period: no decay the season the value was last set.
       const fameDecayRate = posRate;
-      const infamyCanDecay = negRate > 0 && (negFloor !== null || isNeutralBand);
-      const infamyDecayRate = infamyCanDecay ? negRate : 0;
+      const infamyDecayRate = negRate; // 0 on deep enemy → locked; >0 elsewhere → decays
       if (st.fame > 0 && fameDecayRate > 0 && st.fameLastChanged !== currentTick) {
         st.fame = Math.max(0, Math.round(st.fame - fameDecayRate));
       }
@@ -4063,8 +3977,8 @@ function IntroScreen({ onBegin, T }) {
 function RuinScreen({ state, dispatch }) {
   const T = useContext(ThemeCtx);
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: T.ruinBg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, fontFamily: "'Courier Prime', monospace" }}>
-      <div style={{ maxWidth: 560, width: '100%', textAlign: 'center' }}>
+    <div style={{ position: 'fixed', inset: 0, zoom: 0.75, zIndex: 300, background: T.ruinBg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, fontFamily: "'Courier Prime', monospace" }}>
+      <div style={{ maxWidth: 480, width: '100%', textAlign: 'center' }}>
         <div style={{ fontSize: T.fsXxs, color: '#8a1818', textTransform: 'uppercase', letterSpacing: '0.3em', marginBottom: 20 }}>{state.season}, {state.year} — The Territory Has Spoken</div>
         <div style={{ fontSize: T.fsBase, color: T.inkFaint, fontFamily: "'Playfair Display', serif", fontStyle: 'italic', marginBottom: 14 }}>✦ ✦ ✦</div>
         <div style={{ fontSize: 26, color: T.inkMut, fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.15, marginBottom: 24, letterSpacing: '0.02em' }}>{state.ruinHeadline}</div>
@@ -4096,7 +4010,7 @@ function RuinScreen({ state, dispatch }) {
 function WinModal({ condition, dispatch }) {
   const T = useContext(ThemeCtx);
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 250, background: T.modalBg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+    <div style={{ position: 'fixed', inset: 0, zoom: 0.75, zIndex: 250, background: T.modalBg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
       <div style={{ maxWidth: 520, width: '100%', maxHeight: 'calc(70vh * 0.75)', overflowY: 'auto', background: T.hdr, border: `1px solid ${T.bdrHi}`, borderTop: `3px solid ${SCENARIO.accentColor}`, borderRadius: T.radius, padding: T.padModal, animation: 'fadeInModal 0.45s ease-out forwards', boxShadow: '0 12px 48px rgba(0,0,0,0.4)' }}>
         <div style={{ fontSize: T.fsXxs, color: SCENARIO.accentColor, textTransform: 'uppercase', letterSpacing: T.lsXWide, marginBottom: 6, fontFamily: "'Courier Prime', monospace" }}>
           ✦ A Moment of Reckoning
@@ -4132,8 +4046,8 @@ function WinScreen({ state, dispatch }) {
   const wc = WIN_CONDITIONS.find(w => w.id === state.wonConditionId);
   if (!wc) return null;
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, fontFamily: "'Courier Prime', monospace" }}>
-      <div style={{ maxWidth: 560, width: '100%', textAlign: 'center' }}>
+    <div style={{ position: 'fixed', inset: 0, zoom: 0.75, zIndex: 300, background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, fontFamily: "'Courier Prime', monospace" }}>
+      <div style={{ maxWidth: 480, width: '100%', textAlign: 'center' }}>
         <div style={{ fontSize: T.fsXxs, color: SCENARIO.accentColor, textTransform: 'uppercase', letterSpacing: '0.3em', marginBottom: 20 }}>{state.season}, {state.year} — The Ledger Closes</div>
         <div style={{ fontSize: T.fsBase, color: T.inkFaint, fontFamily: "'Playfair Display', serif", fontStyle: 'italic', marginBottom: 14 }}>✦ ✦ ✦</div>
         <div style={{ fontSize: T.fsBase, color: T.inkDim, fontFamily: "'Playfair Display', serif", fontStyle: 'italic', marginBottom: 8 }}>— {wc.subhead} —</div>
@@ -4168,8 +4082,8 @@ function WinScreen({ state, dispatch }) {
 function ObscurityScreen({ state, dispatch }) {
   const T = useContext(ThemeCtx);
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 300, background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, fontFamily: "'Courier Prime', monospace" }}>
-      <div style={{ maxWidth: 560, width: '100%', textAlign: 'center' }}>
+    <div style={{ position: 'fixed', inset: 0, zoom: 0.75, zIndex: 300, background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, fontFamily: "'Courier Prime', monospace" }}>
+      <div style={{ maxWidth: 480, width: '100%', textAlign: 'center' }}>
         <div style={{ fontSize: T.fsXxs, color: T.inkDim, textTransform: 'uppercase', letterSpacing: '0.3em', marginBottom: 20 }}>{state.season}, {state.year} — The Ledger Goes Quiet</div>
         <div style={{ fontSize: T.fsBase, color: T.inkFaint, fontFamily: "'Playfair Display', serif", fontStyle: 'italic', marginBottom: 14 }}>— — —</div>
         <div style={{ fontSize: 26, color: T.inkMut, fontFamily: "'Playfair Display', serif", fontWeight: 900, lineHeight: 1.15, marginBottom: 24, letterSpacing: '0.02em' }}>THE VALLEY FOUND ITS OWN ARRANGEMENT</div>
